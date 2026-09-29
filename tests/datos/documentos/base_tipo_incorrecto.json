@@ -1,0 +1,20 @@
+{
+  "id": "A-3",
+  "codigo": true,
+  "cantidad": "3",
+  "activo": true,
+  "notas": 5,
+  "cliente": "sin datos",
+  "lineas": [
+    42
+  ],
+  "adjuntos": [
+    1,
+    "x",
+    null,
+    {}
+  ],
+  "pulso": {
+    "zona 1": 5
+  }
+}

@@ -11,6 +11,9 @@ ARCHIVO_REGISTRO = "registro.json"
 
 EXTENSION_ESQUEMA = ".schema.json"
 
+CONFIGURACION_VSCODE = ".vscode/settings.json"
+"""Configuración del proyecto en VS Code donde ``exportar-vscode`` asocia patrones y esquemas."""
+
 MAX_INCIDENCIAS_POR_DEFECTO = 200
 """Incidencias que se guardan como máximo por archivo si no se indica otro límite."""
 

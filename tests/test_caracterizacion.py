@@ -316,7 +316,7 @@ ERRORES_DE_COMANDOS = {
     "sin comando": (
         [], "Uso: python main.py <comando> [opciones]\n"
             "Comandos: registrar, actualizar, tipos, mostrar, eliminar, validar, "
-            "migrar-esquemas\n"),
+            "migrar-esquemas, exportar-vscode\n"),
     "comando desconocido": (["borrar"], "Error: comando desconocido: borrar\n"),
     "registrar tipo existente": (
         ["registrar", "--tipo", "base", "--patron", "x_*.json", "--modelo", VACIO],

@@ -19,9 +19,18 @@ from typing import Callable, NoReturn
 
 from gestor_json.almacenamiento import AlmacenEsquemas, AlmacenEsquemasPropio
 from gestor_json import migracion
-from gestor_json.config import ARCHIVO_ESQUEMAS, CARPETA_ESQUEMAS, MAX_INCIDENCIAS_POR_DEFECTO
+from gestor_json.config import (
+    ARCHIVO_ESQUEMAS,
+    CARPETA_ESQUEMAS,
+    CONFIGURACION_VSCODE,
+    MAX_INCIDENCIAS_POR_DEFECTO,
+)
 from gestor_json.informes import EscritorInformes, escribir_resumen_lote, imprimir_resumen
-from gestor_json.jsonschema_formato import AlmacenEsquemasJsonSchema, crear_validador_jsonschema
+from gestor_json.jsonschema_formato import (
+    AlmacenEsquemasJsonSchema,
+    crear_validador_jsonschema,
+    exportar_vscode,
+)
 from gestor_json.lote import ResumenLote, ValidadorLote, listar_archivos
 from gestor_json.modelos import ErrorGestor, NodoEsquema
 from gestor_json.registro import RegistroTipos
@@ -33,7 +42,7 @@ SALIDA_CON_ERRORES = 1
 SALIDA_FALLO = 2
 
 COMANDOS = ("registrar", "actualizar", "tipos", "mostrar", "eliminar", "validar",
-            "migrar-esquemas")
+            "migrar-esquemas", "exportar-vscode")
 
 _FALTA_VALOR = re.compile(r"argument (\S+): expected one argument")
 
@@ -99,6 +108,10 @@ def _crear_parser(programa: str) -> argparse.ArgumentParser:
     migrar.add_argument("--desde", default=ARCHIVO_ESQUEMAS)
     migrar.add_argument("--hacia", default=CARPETA_ESQUEMAS)
     migrar.add_argument("--verificar")
+
+    vscode = subcomando("exportar-vscode", con_formato=False)
+    vscode.add_argument("--esquemas", default=CARPETA_ESQUEMAS)
+    vscode.add_argument("--salida", default=CONFIGURACION_VSCODE)
     return parser
 
 
@@ -118,6 +131,8 @@ def main(argv: list[str] | None = None) -> int:
             raise ErrorGestor(f"argumento no reconocido: {sobrantes[0]}")
         if argumentos.comando == "migrar-esquemas":
             return _migrar_esquemas(argumentos)
+        if argumentos.comando == "exportar-vscode":
+            return _exportar_vscode(argumentos)
         registro = RegistroTipos(_formato(argumentos).crear_almacen())
         return _EJECUTORES[argumentos.comando](argumentos, registro)
     except ErrorGestor as error:
@@ -229,6 +244,13 @@ def _migrar_esquemas(argumentos: argparse.Namespace) -> int:
           f"{verificacion.archivos} archivo(s) con incidencias distintas: "
           f"{', '.join(verificacion.distintos)}")
     return SALIDA_CON_ERRORES
+
+
+def _exportar_vscode(argumentos: argparse.Namespace) -> int:
+    total = exportar_vscode(argumentos.esquemas, argumentos.salida)
+    print(f"{total} esquema(s) asociados en {argumentos.salida}: VS Code validará los JSON que "
+          "encajen con cada patrón mientras se editan")
+    return SALIDA_CORRECTA
 
 
 _EJECUTORES = {

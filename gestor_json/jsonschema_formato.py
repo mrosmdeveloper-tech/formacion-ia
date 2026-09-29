@@ -318,3 +318,47 @@ def _regla_incumplida(error: ValidationError, ruta: str) -> Incidencia:
     else:
         encontrado = json.dumps(error.instance, ensure_ascii=False)
     return Incidencia.regla_incumplida(ruta, regla, f"{regla}: {valor_texto}", encontrado, detalle)
+
+
+# --------------------------------------------------------------------------- VS Code
+
+CLAVE_ESQUEMAS_VSCODE = "json.schemas"
+
+
+def asociaciones_vscode(carpeta: str | Path = CARPETA_ESQUEMAS) -> list[dict[str, Any]]:
+    """Una asociación de ``json.schemas`` por tipo: su patrón (en cualquier carpeta) y su esquema.
+
+    La URL es relativa a la carpeta del proyecto (``./esquemas/pedido.schema.json``) si la
+    carpeta de esquemas es relativa, o ``file://`` si es absoluta.
+    """
+    carpeta = Path(carpeta)
+    base = carpeta.as_uri() if carpeta.is_absolute() else f"./{carpeta.as_posix()}"
+    tipos = AlmacenEsquemasJsonSchema(carpeta).cargar()
+    if not tipos:
+        raise ErrorGestor(f"no hay tipos registrados en {carpeta}")
+    return [{"fileMatch": [f"**/{tipo.patron}"], "url": f"{base}/{nombre}{EXTENSION_ESQUEMA}"}
+            for nombre, tipo in tipos.items()]
+
+
+def exportar_vscode(carpeta: str | Path, salida: str | Path) -> int:
+    """Escribe en ``salida`` (un ``settings.json`` de VS Code) las asociaciones de los esquemas.
+
+    Si el archivo existe, conserva el resto de la configuración y las asociaciones de otros
+    esquemas, y sustituye las de esta carpeta. Devuelve el número de asociaciones escritas.
+    """
+    salida = Path(salida)
+    asociaciones = asociaciones_vscode(carpeta)
+    configuracion: dict[str, Any] = {}
+    if salida.exists():
+        try:
+            configuracion = leer_json(salida)
+        except Exception as error:  # noqa: BLE001 - cualquier fallo de lectura se informa igual
+            raise ErrorGestor(f"no se puede leer {salida} (¿tiene comentarios?): {error}") from error
+    nuevas = {asociacion["url"] for asociacion in asociaciones}
+    base = asociaciones[0]["url"].rsplit("/", 1)[0] + "/"
+    otras = [a for a in configuracion.get(CLAVE_ESQUEMAS_VSCODE, [])
+             if a.get("url") not in nuevas and not str(a.get("url", "")).startswith(base)]
+    configuracion[CLAVE_ESQUEMAS_VSCODE] = otras + asociaciones
+    salida.parent.mkdir(parents=True, exist_ok=True)
+    _escribir_json(salida, configuracion)
+    return len(asociaciones)

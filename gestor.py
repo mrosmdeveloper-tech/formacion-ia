@@ -2,6 +2,7 @@ import sys
 import os
 import json
 import fnmatch
+import re
 from datetime import datetime
 
 incidencias = []
@@ -130,6 +131,108 @@ def imprimir(e, nombre, nivel):
                 imprimir(e["campos"][k]["esq"], k + " (opcional)", nivel + 1)
     if "list" in tt:
         imprimir(e["item"], "[]", nivel + 1)
+
+
+def validar(v, e, ruta):
+    global incidencias
+    if type(e["t"]) == list:
+        tt = e["t"]
+    else:
+        tt = [e["t"]]
+    if "unk" in tt:
+        return
+    if v is None:
+        if e["nulo"] == False:
+            incidencias.append({
+                "nivel": "error",
+                "categoria": "nulo_no_permitido",
+                "ruta": ruta,
+                "esperado": desc(e),
+                "encontrado": "nulo",
+                "mensaje": "Valor nulo no permitido: se esperaba " + desc(e),
+            })
+        return
+    if type(v) == bool:
+        tv = "bool"
+    elif type(v) == int or type(v) == float:
+        tv = "num"
+    elif type(v) == str:
+        tv = "str"
+    elif type(v) == dict:
+        tv = "obj"
+    elif type(v) == list:
+        tv = "list"
+    else:
+        tv = "unk"
+    if tv not in tt:
+        incidencias.append({
+            "nivel": "error",
+            "categoria": "tipo_incorrecto",
+            "ruta": ruta,
+            "esperado": desc(e),
+            "encontrado": desc({"t": tv, "nulo": False}),
+            "mensaje": "Tipo incorrecto: se esperaba " + desc(e) + " y se encontró " + desc({"t": tv, "nulo": False}),
+        })
+        return
+    if tv == "obj":
+        for k in e["campos"]:
+            if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", k):
+                r = ruta + "." + k
+            else:
+                r = ruta + "[" + json.dumps(k, ensure_ascii=False) + "]"
+            if k in v:
+                validar(v[k], e["campos"][k]["esq"], r)
+            else:
+                if e["campos"][k]["req"]:
+                    incidencias.append({
+                        "nivel": "error",
+                        "categoria": "falta_campo",
+                        "ruta": r,
+                        "esperado": desc(e["campos"][k]["esq"]),
+                        "encontrado": "ausente",
+                        "mensaje": "Falta el campo obligatorio '" + k + "'",
+                    })
+        for k in v:
+            if k not in e["campos"]:
+                if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", k):
+                    r = ruta + "." + k
+                else:
+                    r = ruta + "[" + json.dumps(k, ensure_ascii=False) + "]"
+                if v[k] is None:
+                    aux = "nulo"
+                elif type(v[k]) == bool:
+                    aux = "booleano"
+                elif type(v[k]) == int or type(v[k]) == float:
+                    aux = "numero"
+                elif type(v[k]) == str:
+                    aux = "texto"
+                elif type(v[k]) == dict:
+                    aux = "objeto"
+                else:
+                    aux = "lista"
+                incidencias.append({
+                    "nivel": "aviso",
+                    "categoria": "campo_extra",
+                    "ruta": r,
+                    "esperado": "ausente",
+                    "encontrado": aux,
+                    "mensaje": "Campo no previsto en el esquema: '" + k + "'",
+                })
+    if tv == "list":
+        for i in range(len(v)):
+            validar(v[i], e["item"], ruta + "[" + str(i) + "]")
+
+
+def clave_orden(x):
+    aux = []
+    for m in re.finditer(r'\.([A-Za-z_][A-Za-z0-9_]*)|\[(\d+)\]|\[("(?:[^"\\]|\\.)*")\]', x["ruta"]):
+        if m.group(1) is not None:
+            aux.append((0, m.group(1)))
+        elif m.group(2) is not None:
+            aux.append((1, int(m.group(2))))
+        else:
+            aux.append((0, json.loads(m.group(3))))
+    return aux
 
 
 def main():
@@ -409,6 +512,27 @@ def main():
                         "encontrado": ", ".join(cands),
                         "mensaje": "El nombre encaja con varios patrones (" + ", ".join(cands) + "); se usa '" + tipo + "'",
                     })
+                try:
+                    f = open(p, encoding="utf-8-sig")
+                    doc = json.load(f)
+                    f.close()
+                    ok = True
+                except Exception as ex:
+                    incidencias.append({
+                        "nivel": "error",
+                        "categoria": "json_invalido",
+                        "ruta": "$",
+                        "esperado": "",
+                        "encontrado": "",
+                        "mensaje": "El archivo no es un JSON válido: " + str(ex),
+                    })
+                    ok = False
+                if ok:
+                    aux = len(incidencias)
+                    validar(doc, d["tipos"][tipo]["esquema"], "$")
+                    tmp = incidencias[aux:]
+                    tmp.sort(key=clave_orden)
+                    incidencias = incidencias[:aux] + tmp
             if tipo == "":
                 print(nom + " -> (sin tipo)")
             else:

@@ -1,8 +1,10 @@
-"""Tests de caracterización de ``gestor.py`` (versión legacy).
+"""Tests de caracterización del gestor de tipos JSON.
 
-Fijan el comportamiento actual del programa ejecutando sus comandos de principio a fin: el
-contenido exacto de ``esquemas.json`` y de los informes, la salida por consola y el código de
-salida. Sirven de red de seguridad para la refactorización: tras ella, todos deben seguir en verde.
+Se escribieron sobre la versión legacy (``gestor.py``, un único archivo) antes de refactorizarla, y
+fijan su comportamiento ejecutando los comandos de principio a fin: el contenido exacto de
+``esquemas.json`` y de los informes, la salida por consola y el código de salida. La versión
+modular (``gestor_json``) los pasa sin cambiar ningún valor esperado; el único cambio es el nombre
+del programa en el mensaje de uso (``main.py`` en lugar de ``gestor.py``).
 
 Cada test se ejecuta en una carpeta temporal (nunca toca el ``esquemas.json`` real), con la fecha
 de registro y el cronómetro fijados para que los resultados sean deterministas.
@@ -17,7 +19,6 @@ from types import SimpleNamespace
 
 import pytest
 
-import gestor
 import gestor_json.cli
 import gestor_json.registro
 
@@ -43,23 +44,16 @@ class FechaFija:
 
 @pytest.fixture
 def cli(tmp_path, monkeypatch, capsys):
-    """Ejecuta ``gestor.main()`` con los argumentos dados y devuelve (código, salida).
-
-    Los comandos que terminan bien sin llamar a ``sys.exit`` devuelven código 0, que es el
-    código con el que termina el proceso real.
-    """
+    """Ejecuta ``gestor_json.cli.main`` con los argumentos dados y devuelve (código, salida)."""
     monkeypatch.chdir(tmp_path)
     FechaFija.ahora = FECHA
     monkeypatch.setattr(gestor_json.registro, "datetime", FechaFija)
     monkeypatch.setattr(gestor_json.cli, "time", SimpleNamespace(perf_counter=lambda: 0.0))
 
     def ejecutar(*args):
-        monkeypatch.setattr(sys, "argv", ["gestor.py", *[str(a) for a in args]])
-        codigo = 0
-        try:
-            gestor.main()
-        except SystemExit as salida:
-            codigo = salida.code
+        argv = [str(a) for a in args]
+        monkeypatch.setattr(sys, "argv", ["main.py", *argv])
+        codigo = gestor_json.cli.main(argv)
         return codigo, capsys.readouterr().out
 
     return ejecutar
@@ -317,7 +311,7 @@ MENSAJE_JSON_INVALIDO = "Expecting property name enclosed in double quotes: line
 
 ERRORES_DE_COMANDOS = {
     "sin comando": (
-        [], "Uso: python gestor.py <comando> [opciones]\n"
+        [], "Uso: python main.py <comando> [opciones]\n"
             "Comandos: registrar, actualizar, tipos, mostrar, eliminar, validar\n"),
     "comando desconocido": (["borrar"], "Error: comando desconocido: borrar\n"),
     "registrar tipo existente": (

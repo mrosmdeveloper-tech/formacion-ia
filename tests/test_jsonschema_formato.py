@@ -415,3 +415,82 @@ def test_por_defecto_se_usa_json_schema(ejecutar):
 def test_formato_desconocido(ejecutar):
     assert ejecutar("tipos", "--formato", "xml") == (
         2, "Error: formato desconocido: xml (usa jsonschema o propio)\n")
+
+
+# --------------------------------------------------------------------------- reglas a mano y actualizar
+
+def incidencias_de(ruta_csv):
+    with open(ruta_csv, encoding="utf-8", newline="") as archivo:
+        return [(f["categoria"], f["ruta"], f["esperado"]) for f in csv.DictReader(archivo)]
+
+
+def registrar_pedido(ejecutar, *numeros):
+    ejecutar("registrar", "--tipo", "pedido", "--patron", "pedido_*.json",
+             *[arg for n in numeros
+               for arg in ("--modelo", EJEMPLOS / "modelos" / f"pedido_modelo_{n}.json")])
+
+
+def test_minimum_a_mano_se_respeta_al_validar_y_sobrevive_a_actualizar(ejecutar):
+    registrar_pedido(ejecutar, 1, 2)
+    esquema_path = Path("esquemas/pedido.schema.json")
+    esquema = leer(esquema_path)
+    esquema["properties"]["lineas"]["items"]["properties"]["cantidad"]["minimum"] = 1
+    escribir(esquema_path, esquema)
+    documento = leer(EJEMPLOS / "modelos" / "pedido_modelo_1.json")
+    documento["lineas"][0]["cantidad"] = 0
+    escribir("pedido_x.json", documento)
+    esperada = [("regla_incumplida", "$.lineas[0].cantidad", "minimum: 1")]
+
+    ejecutar("validar", "pedido_x.json", "--salida", "antes")
+    codigo, salida = ejecutar("actualizar", "--tipo", "pedido", "--modelo",
+                              EJEMPLOS / "modelos" / "pedido_modelo_3.json")
+    ejecutar("validar", "pedido_x.json", "--salida", "despues")
+
+    assert incidencias_de("antes/incidencias.csv") == esperada
+    assert (codigo, salida) == (0, "Tipo 'pedido' actualizado: 3 modelo(s) en total\n")
+    cantidad = leer(esquema_path)["properties"]["lineas"]["items"]["properties"]["cantidad"]
+    assert cantidad == {"type": "number", "minimum": 1}
+    assert incidencias_de("despues/incidencias.csv") == esperada
+
+
+def test_ref_a_un_subesquema_comun_se_respeta_y_sobrevive_a_actualizar(ejecutar):
+    modelos = sorted(EJEMPLOS.glob("modelos/ruta_modelo_*.json"))
+    ejecutar("registrar", "--tipo", "actividad", "--patron", "ruta_*.json",
+             "--modelo", modelos[0], "--modelo", modelos[1])
+    esquema_path = Path("esquemas/actividad.schema.json")
+    esquema = leer(esquema_path)
+    esquema["$defs"] = {"latitud": {"minimum": -90, "maximum": 90}}
+    punto = esquema["properties"]["segmentos"]["items"]["properties"]["puntos"]["items"]
+    punto["properties"]["lat"]["$ref"] = "#/$defs/latitud"
+    escribir(esquema_path, esquema)
+    documento = leer(modelos[0])
+    documento["segmentos"][0]["puntos"][0]["lat"] = 100
+    escribir("ruta_x.json", documento)
+
+    ejecutar("actualizar", "--tipo", "actividad", "--modelo", modelos[2])
+    ejecutar("validar", "ruta_x.json", "--salida", "salida")
+
+    assert leer(esquema_path)["$defs"] == {"latitud": {"minimum": -90, "maximum": 90}}
+    assert incidencias_de("salida/incidencias.csv") == [
+        ("regla_incumplida", "$.segmentos[0].puntos[0].lat", "maximum: 90")]
+
+
+def test_integer_a_mano_se_valida_pero_se_regenera_al_actualizar(ejecutar):
+    """Limitación documentada: ``type`` es estructura deducida y se regenera al actualizar."""
+    registrar_pedido(ejecutar, 1)
+    esquema_path = Path("esquemas/pedido.schema.json")
+    esquema = leer(esquema_path)
+    esquema["properties"]["lineas"]["items"]["properties"]["cantidad"]["type"] = "integer"
+    escribir(esquema_path, esquema)
+    documento = leer(EJEMPLOS / "modelos" / "pedido_modelo_1.json")
+    documento["lineas"][0]["cantidad"] = 2.5
+    escribir("pedido_x.json", documento)
+
+    ejecutar("validar", "pedido_x.json", "--salida", "antes")
+    ejecutar("actualizar", "--tipo", "pedido", "--modelo",
+             EJEMPLOS / "modelos" / "pedido_modelo_2.json")
+
+    assert incidencias_de("antes/incidencias.csv") == [
+        ("tipo_incorrecto", "$.lineas[0].cantidad", "entero")]
+    cantidad = leer(esquema_path)["properties"]["lineas"]["items"]["properties"]["cantidad"]
+    assert cantidad == {"type": "number"}

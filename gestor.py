@@ -3,6 +3,8 @@ import os
 import json
 import fnmatch
 import re
+import csv
+import time
 from datetime import datetime
 
 incidencias = []
@@ -445,11 +447,15 @@ def main():
         print("Tipo '" + tipo + "' eliminado")
     elif cmd == "validar":
         ruta = None
+        sal = None
         est = False
         mx = 200
         i = 0
         while i < len(args):
-            if args[i] == "--estricto":
+            if args[i] == "--salida" and i + 1 < len(args):
+                sal = args[i + 1]
+                i = i + 2
+            elif args[i] == "--estricto":
                 est = True
                 i = i + 1
             elif args[i] == "--max-incidencias" and i + 1 < len(args):
@@ -474,9 +480,13 @@ def main():
         if ruta is None:
             print("Error: falta el archivo o la carpeta a validar")
             sys.exit(2)
+        if sal is None:
+            print("Error: falta --salida")
+            sys.exit(2)
         if not os.path.exists(ruta):
             print("Error: no existe " + ruta)
             sys.exit(2)
+        t0 = time.perf_counter()
         if os.path.exists("esquemas.json"):
             try:
                 f = open("esquemas.json", encoding="utf-8-sig")
@@ -494,6 +504,26 @@ def main():
                     arch.append(os.path.join(ruta, n))
         else:
             arch = [ruta]
+        try:
+            os.makedirs(sal, exist_ok=True)
+            f1 = open(os.path.join(sal, "incidencias.csv"), "w", newline="", encoding="utf-8")
+            w1 = csv.writer(f1)
+            w1.writerow(["archivo", "tipo", "nivel", "categoria", "ruta", "esperado", "encontrado", "mensaje"])
+            f2 = open(os.path.join(sal, "resumen_archivos.csv"), "w", newline="", encoding="utf-8")
+            w2 = csv.writer(f2)
+            w2.writerow(["archivo", "tipo", "valido", "errores", "avisos"])
+        except Exception as ex:
+            print("Error: no se pueden crear los informes en " + sal + ": " + str(ex))
+            sys.exit(2)
+        tot = 0
+        val = 0
+        cerr = 0
+        stip = 0
+        por_tipo = {}
+        for n in d["tipos"]:
+            por_tipo[n] = 0
+        cats = {}
+        rutas = {}
         for p in arch:
             nom = os.path.basename(p)
             incidencias = []
@@ -563,16 +593,88 @@ def main():
                     "encontrado": str(aux),
                     "mensaje": "Se han encontrado " + str(aux) + " incidencias; solo se incluyen las primeras " + str(mx),
                 })
-            if tipo == "":
-                print(nom + " -> (sin tipo)")
-            else:
-                print(nom + " -> " + tipo)
+            ne = 0
+            na = 0
             for x in incidencias:
-                print("  [" + x["nivel"] + "] " + x["categoria"] + " " + x["ruta"] + ": " + x["mensaje"])
+                if x["nivel"] == "error":
+                    ne = ne + 1
+                else:
+                    na = na + 1
+                w1.writerow([nom, tipo, x["nivel"], x["categoria"], x["ruta"], x["esperado"], x["encontrado"], x["mensaje"]])
+                if x["categoria"] in cats:
+                    cats[x["categoria"]] = cats[x["categoria"]] + 1
+                else:
+                    cats[x["categoria"]] = 1
+                if tipo != "" and x["ruta"] != "":
+                    r = re.sub(r"\[\d+\]", "[*]", x["ruta"])
+                    if tipo not in rutas:
+                        rutas[tipo] = {}
+                    if r in rutas[tipo]:
+                        rutas[tipo][r] = rutas[tipo][r] + 1
+                    else:
+                        rutas[tipo][r] = 1
+            tot = tot + 1
+            if tipo == "":
+                stip = stip + 1
+                w2.writerow([nom, "", "no", ne, na])
+            else:
+                por_tipo[tipo] = por_tipo[tipo] + 1
+                if ne == 0:
+                    val = val + 1
+                    w2.writerow([nom, tipo, "si", ne, na])
+                else:
+                    cerr = cerr + 1
+                    w2.writerow([nom, tipo, "no", ne, na])
+        f1.close()
+        f2.close()
+        top = {}
+        for t in d["tipos"]:
+            if t in rutas:
+                tmp = sorted(rutas[t].items(), key=lambda x: (-x[1], x[0]))
+                top[t] = []
+                for x in tmp[:10]:
+                    top[t].append({"ruta": x[0], "incidencias": x[1]})
+        aux = {}
+        for c in sorted(cats):
+            aux[c] = cats[c]
+        seg = round(time.perf_counter() - t0, 3)
+        res = {
+            "archivos_totales": tot,
+            "por_tipo": por_tipo,
+            "validos": val,
+            "con_errores": cerr,
+            "sin_tipo": stip,
+            "incidencias_por_categoria": aux,
+            "rutas_mas_frecuentes": top,
+            "tiempo_s": seg,
+        }
+        f = open(os.path.join(sal, "resumen_lote.json"), "w", encoding="utf-8")
+        json.dump(res, f, indent=2, ensure_ascii=False)
+        f.close()
+        print("Archivos procesados: " + str(tot))
+        for t in por_tipo:
+            print("  " + t + ": " + str(por_tipo[t]))
+        print("  sin tipo: " + str(stip))
+        print("Válidos: " + str(val) + "  Con errores: " + str(cerr) + "  Sin tipo: " + str(stip))
+        n = 0
+        for c in aux:
+            n = n + aux[c]
+        print("Incidencias: " + str(n))
+        for c in aux:
+            print("  " + c + ": " + str(aux[c]))
+        print("Informes en: " + sal)
+        print("Tiempo total: " + str(seg) + " s")
+        if cerr > 0:
+            sys.exit(1)
+        sys.exit(0)
     else:
         print("Error: comando desconocido: " + cmd)
         sys.exit(2)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as ex:
+        print("Error inesperado: " + str(ex))
+        sys.exit(2)

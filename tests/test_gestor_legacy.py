@@ -473,3 +473,271 @@ def test_sin_esquemas_todos_los_archivos_quedan_sin_tipo(cli):
     resumen = json.loads(Path("salida/resumen_lote.json").read_text(encoding="utf-8"))
     assert resumen["sin_tipo"] == 4
     assert resumen["por_tipo"] == {}
+
+
+# --------------------------------------------------------------------------- validación
+
+@pytest.fixture
+def tipo_base(cli):
+    registrar(cli, "base", "base_*.json", MODELOS / "base_1.json", MODELOS / "base_2.json")
+
+
+def validar_documento(cli, nombre, *opciones):
+    """Valida un documento de ``tests/datos/documentos`` y devuelve (código, incidencias, resumen).
+
+    Las incidencias se devuelven sin las columnas ``archivo`` y ``tipo``.
+    """
+    codigo, _ = cli("validar", DOCUMENTOS / nombre, "--salida", "salida", *opciones)
+    incidencias = [tuple(fila[2:]) for fila in leer_csv("salida/incidencias.csv")[1:]]
+    resumen = leer_csv("salida/resumen_archivos.csv")[1]
+    return codigo, incidencias, resumen
+
+
+def tipo_incorrecto(ruta, esperado, encontrado):
+    return ("error", "tipo_incorrecto", ruta, esperado, encontrado,
+            f"Tipo incorrecto: se esperaba {esperado} y se encontró {encontrado}")
+
+
+def nulo_no_permitido(ruta, esperado):
+    return ("error", "nulo_no_permitido", ruta, esperado, "nulo",
+            f"Valor nulo no permitido: se esperaba {esperado}")
+
+
+def falta_campo(ruta, campo, esperado):
+    return ("error", "falta_campo", ruta, esperado, "ausente",
+            f"Falta el campo obligatorio '{campo}'")
+
+
+def campo_extra(ruta, campo, encontrado, nivel="aviso"):
+    return (nivel, "campo_extra", ruta, "ausente", encontrado,
+            f"Campo no previsto en el esquema: '{campo}'")
+
+
+# Incidencias esperadas por documento, ordenadas por ruta (con los índices en orden numérico).
+INCIDENCIAS_POR_DOCUMENTO = {
+    "base_valido.json": [],
+    "base_bom.json": [],
+    "base_falta_campo.json": [
+        falta_campo("$.cliente.email", "email", "texto"),
+        falta_campo("$.lineas[1].precio", "precio", "numero"),
+    ],
+    "base_campo_extra.json": [
+        campo_extra("$.cliente.vip", "vip", "booleano"),
+        campo_extra("$.origen", "origen", "texto"),
+    ],
+    "base_tipo_incorrecto.json": [
+        tipo_incorrecto("$.cantidad", "numero", "texto"),
+        tipo_incorrecto("$.cliente", "objeto", "texto"),
+        tipo_incorrecto("$.codigo", "numero | texto", "booleano"),
+        tipo_incorrecto("$.lineas[0]", "objeto", "numero"),
+        tipo_incorrecto("$.notas", "texto | nulo", "numero"),
+    ],
+    "base_bool_numero.json": [
+        tipo_incorrecto("$.activo", "booleano", "numero"),
+        tipo_incorrecto("$.cantidad", "numero", "booleano"),
+    ],
+    "base_nulo_no_permitido.json": [
+        nulo_no_permitido("$.cliente", "objeto"),
+        nulo_no_permitido("$.id", "texto"),
+        nulo_no_permitido("$.lineas[0]", "objeto"),
+    ],
+    "base_clave_espacios.json": [
+        tipo_incorrecto('$.pulso["zona 1"]', "numero", "texto"),
+        campo_extra('$.pulso["zona 2"]', "zona 2", "numero"),
+    ],
+    "base_raiz_lista.json": [
+        tipo_incorrecto("$", "objeto", "lista"),
+    ],
+    "base_json_invalido.json": [
+        ("error", "json_invalido", "$", "", "",
+         f"El archivo no es un JSON válido: {MENSAJE_JSON_INVALIDO}"),
+    ],
+}
+
+
+@pytest.mark.parametrize("nombre, esperadas", INCIDENCIAS_POR_DOCUMENTO.items(),
+                         ids=INCIDENCIAS_POR_DOCUMENTO.keys())
+def test_incidencias_de_cada_documento(cli, tipo_base, nombre, esperadas):
+    codigo, incidencias, resumen = validar_documento(cli, nombre)
+
+    assert incidencias == esperadas
+    errores = sum(1 for i in esperadas if i[0] == "error")
+    avisos = len(esperadas) - errores
+    valido = "si" if errores == 0 else "no"
+    assert resumen == [nombre, "base", valido, str(errores), str(avisos)]
+    assert codigo == (1 if errores else 0)
+
+
+def test_documento_sin_tipo_no_se_valida(cli, tipo_base):
+    codigo, incidencias, resumen = validar_documento(cli, "otro_nombre.json")
+
+    assert codigo == 0
+    assert incidencias == [("aviso", "sin_tipo", "", "", "", SIN_TIPO)]
+    assert resumen == ["otro_nombre.json", "", "no", "0", "1"]
+
+
+def test_modo_estricto_convierte_los_campos_extra_en_errores(cli, tipo_base):
+    codigo, incidencias, resumen = validar_documento(cli, "base_campo_extra.json", "--estricto")
+
+    assert codigo == 1
+    assert incidencias == [
+        campo_extra("$.cliente.vip", "vip", "booleano", nivel="error"),
+        campo_extra("$.origen", "origen", "texto", nivel="error"),
+    ]
+    assert resumen == ["base_campo_extra.json", "base", "no", "2", "0"]
+
+
+def test_por_defecto_se_truncan_a_200_incidencias(cli, tipo_base):
+    codigo, incidencias, resumen = validar_documento(cli, "base_muchas_incidencias.json")
+
+    assert codigo == 1
+    assert len(incidencias) == 201
+    assert incidencias[:200] == [
+        falta_campo(f"$.lineas[{n}].sku", "sku", "texto") for n in range(200)]
+    assert incidencias[200] == (
+        "aviso", "incidencias_truncadas", "", "200", "250",
+        "Se han encontrado 250 incidencias; solo se incluyen las primeras 200")
+    assert resumen == ["base_muchas_incidencias.json", "base", "no", "200", "1"]
+
+
+def test_max_incidencias_personalizado(cli, tipo_base):
+    _, incidencias, resumen = validar_documento(cli, "base_tipo_incorrecto.json",
+                                                "--max-incidencias", "3")
+
+    assert incidencias == INCIDENCIAS_POR_DOCUMENTO["base_tipo_incorrecto.json"][:3] + [
+        ("aviso", "incidencias_truncadas", "", "3", "5",
+         "Se han encontrado 5 incidencias; solo se incluyen las primeras 3")]
+    assert resumen == ["base_tipo_incorrecto.json", "base", "no", "3", "1"]
+
+
+def test_sin_truncar_si_no_se_supera_el_maximo(cli, tipo_base):
+    _, incidencias, _ = validar_documento(cli, "base_tipo_incorrecto.json",
+                                          "--max-incidencias", "5")
+
+    assert incidencias == INCIDENCIAS_POR_DOCUMENTO["base_tipo_incorrecto.json"]
+
+
+# --------------------------------------------------------------------------- informes del lote
+
+RESUMEN_LOTE_DOCUMENTOS = {
+    "archivos_totales": 12,
+    "por_tipo": {"base": 11},
+    "validos": 3,
+    "con_errores": 8,
+    "sin_tipo": 1,
+    "incidencias_por_categoria": {
+        "campo_extra": 3,
+        "falta_campo": 202,
+        "incidencias_truncadas": 1,
+        "json_invalido": 1,
+        "nulo_no_permitido": 3,
+        "sin_tipo": 1,
+        "tipo_incorrecto": 9,
+    },
+    "rutas_mas_frecuentes": {"base": [
+        {"ruta": "$.lineas[*].sku", "incidencias": 200},
+        {"ruta": "$", "incidencias": 2},
+        {"ruta": "$.cantidad", "incidencias": 2},
+        {"ruta": "$.cliente", "incidencias": 2},
+        {"ruta": "$.lineas[*]", "incidencias": 2},
+        {"ruta": "$.activo", "incidencias": 1},
+        {"ruta": "$.cliente.email", "incidencias": 1},
+        {"ruta": "$.cliente.vip", "incidencias": 1},
+        {"ruta": "$.codigo", "incidencias": 1},
+        {"ruta": "$.id", "incidencias": 1},
+    ]},
+    "tiempo_s": 0.0,
+}
+
+
+def test_validar_carpeta_genera_los_tres_informes(cli, tipo_base):
+    codigo, salida = cli("validar", DOCUMENTOS, "--salida", "salida")
+
+    assert codigo == 1
+    assert salida == (
+        "Archivos procesados: 12\n"
+        "  base: 11\n"
+        "  sin tipo: 1\n"
+        "Válidos: 3  Con errores: 8  Sin tipo: 1\n"
+        "Incidencias: 220\n"
+        "  campo_extra: 3\n"
+        "  falta_campo: 202\n"
+        "  incidencias_truncadas: 1\n"
+        "  json_invalido: 1\n"
+        "  nulo_no_permitido: 3\n"
+        "  sin_tipo: 1\n"
+        "  tipo_incorrecto: 9\n"
+        "Informes en: salida\n"
+        "Tiempo total: 0.0 s\n"
+    )
+    assert Path("salida/resumen_lote.json").read_text(encoding="utf-8") == json.dumps(
+        RESUMEN_LOTE_DOCUMENTOS, indent=2, ensure_ascii=False)
+    # Solo los .json de la carpeta (leeme.txt se ignora), en orden alfabético.
+    assert [fila[0] for fila in leer_csv("salida/resumen_archivos.csv")[1:]] == sorted(
+        p.name for p in DOCUMENTOS.glob("*.json"))
+    assert len(leer_csv("salida/incidencias.csv")) == 1 + 220
+
+
+def test_lote_sin_errores_termina_con_codigo_0(cli, tipo_base):
+    codigo, salida = cli("validar", DOCUMENTOS / "base_valido.json", "--salida", "salida")
+
+    assert codigo == 0
+    assert "Válidos: 1  Con errores: 0  Sin tipo: 0\n" in salida
+    assert leer_csv("salida/incidencias.csv") == [CABECERA_INCIDENCIAS]
+
+
+def test_lote_de_ejemplo_identico_a_la_referencia(cli):
+    """Caracterización global: registra los tres tipos de ``datos/ejemplos`` y valida su entrada.
+
+    ``esquemas.json`` y los tres informes deben coincidir byte a byte con los de
+    ``tests/datos/esperado/ejemplos``, generados con la versión legacy y revisados a mano.
+    """
+    ejemplos = Path(__file__).parent.parent / "datos" / "ejemplos"
+    for tipo, patron, prefijo in [("pedido", "pedido_*.json", "pedido"),
+                                  ("lectura_sensor", "sensor_*.json", "sensor"),
+                                  ("actividad", "ruta_*.json", "ruta")]:
+        modelos = [ejemplos / "modelos" / f"{prefijo}_modelo_{n}.json" for n in (1, 2, 3)]
+        registrar(cli, tipo, patron, *modelos)
+
+    codigo, _ = cli("validar", ejemplos / "entrada", "--salida", "salida")
+
+    assert codigo == 1
+    esperado = DATOS / "esperado" / "ejemplos"
+    assert Path("esquemas.json").read_bytes() == (esperado / "esquemas.json").read_bytes()
+    for informe in ("incidencias.csv", "resumen_archivos.csv", "resumen_lote.json"):
+        assert (Path("salida") / informe).read_bytes() == (esperado / informe).read_bytes(), informe
+
+
+# --------------------------------------------------------------------------- errores de validar
+
+ERRORES_DE_VALIDAR = {
+    "sin ruta": (["--salida", "s"], "Error: falta el archivo o la carpeta a validar\n"),
+    "sin salida": ([DOCUMENTOS], "Error: falta --salida\n"),
+    "ruta inexistente": (["no_existe", "--salida", "s"], "Error: no existe no_existe\n"),
+    "máximo no numérico": (
+        [DOCUMENTOS, "--salida", "s", "--max-incidencias", "diez"],
+        "Error: --max-incidencias debe ser un número entero\n"),
+    "máximo cero": (
+        [DOCUMENTOS, "--salida", "s", "--max-incidencias", "0"],
+        "Error: --max-incidencias debe ser al menos 1\n"),
+    "máximo sin valor": (
+        [DOCUMENTOS, "--salida", "s", "--max-incidencias"],
+        "Error: argumento no reconocido: --max-incidencias\n"),
+    "opción desconocida": ([DOCUMENTOS, "--rapido"], "Error: argumento no reconocido: --rapido\n"),
+    "dos rutas": ([DOCUMENTOS, "otra"], "Error: argumento no reconocido: otra\n"),
+}
+
+
+@pytest.mark.parametrize("args, mensaje", ERRORES_DE_VALIDAR.values(), ids=ERRORES_DE_VALIDAR.keys())
+def test_errores_de_validar_terminan_con_codigo_2(cli, args, mensaje):
+    assert cli("validar", *args) == (2, mensaje)
+    assert not Path("s").exists()
+
+
+def test_salida_que_no_se_puede_crear(cli):
+    Path("ocupado").write_text("soy un archivo", encoding="utf-8")
+
+    codigo, salida = cli("validar", DOCUMENTOS, "--salida", "ocupado")
+
+    assert codigo == 2
+    assert salida.startswith("Error: no se pueden crear los informes en ocupado: ")

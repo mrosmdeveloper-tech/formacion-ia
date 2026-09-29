@@ -1,0 +1,15 @@
+archivo,tipo,valido,errores,avisos
+informe_0008.json,,no,0,1
+pedido_0001.json,pedido,si,0,0
+pedido_0002.json,pedido,no,1,0
+pedido_0006.json,pedido,no,1,0
+pedido_0012.json,pedido,si,0,0
+ruta_0005.json,actividad,no,1,0
+ruta_0007.json,actividad,no,1,0
+ruta_0013.json,actividad,si,0,1
+sensor_0003.json,lectura_sensor,si,0,0
+sensor_0004.json,lectura_sensor,si,0,0
+sensor_0009.json,lectura_sensor,no,1,0
+sensor_0010.json,lectura_sensor,si,0,0
+sensor_0011.json,lectura_sensor,si,0,0
+sensor_0014.json,lectura_sensor,no,1,0

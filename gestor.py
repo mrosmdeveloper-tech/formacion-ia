@@ -1,23 +1,14 @@
 import sys
 import os
-import csv
 import time
 
-from gestor_json.config import (
-    ARCHIVO_INCIDENCIAS,
-    ARCHIVO_RESUMEN_ARCHIVOS,
-    ARCHIVO_RESUMEN_LOTE,
-    EXTENSION_JSON,
-    MAX_INCIDENCIAS_POR_DEFECTO,
-    TOP_RUTAS,
-)
-from gestor_json.almacenamiento import AlmacenEsquemasPropio, leer_json
-from gestor_json.modelos import ErrorGestor, Incidencia
-from gestor_json.registro import RegistroTipos, clasificar_archivo
-from gestor_json.rutas import normalizar
+from gestor_json.almacenamiento import AlmacenEsquemasPropio
+from gestor_json.config import MAX_INCIDENCIAS_POR_DEFECTO
+from gestor_json.informes import EscritorInformes, escribir_resumen_lote, imprimir_resumen
+from gestor_json.lote import ResumenLote, ValidadorLote, listar_archivos
+from gestor_json.modelos import ErrorGestor
+from gestor_json.registro import RegistroTipos
 from gestor_json.tipos_logicos import TipoLogico
-from gestor_json.validacion import ValidadorPropio
-import json
 
 
 def imprimir(e, nombre, nivel):
@@ -187,129 +178,24 @@ def comando():
             print("Error: no existe " + ruta)
             sys.exit(2)
         t0 = time.perf_counter()
-        d = registro.tipos()
-        if os.path.isdir(ruta):
-            arch = []
-            for n in sorted(os.listdir(ruta)):
-                if os.path.isfile(os.path.join(ruta, n)) and n.lower().endswith(EXTENSION_JSON):
-                    arch.append(os.path.join(ruta, n))
-        else:
-            arch = [ruta]
+        tipos = registro.tipos()
+        archivos = listar_archivos(ruta)
         try:
-            os.makedirs(sal, exist_ok=True)
-            f1 = open(os.path.join(sal, ARCHIVO_INCIDENCIAS), "w", newline="", encoding="utf-8")
-            w1 = csv.writer(f1)
-            w1.writerow(["archivo", "tipo", "nivel", "categoria", "ruta", "esperado", "encontrado", "mensaje"])
-            f2 = open(os.path.join(sal, ARCHIVO_RESUMEN_ARCHIVOS), "w", newline="", encoding="utf-8")
-            w2 = csv.writer(f2)
-            w2.writerow(["archivo", "tipo", "valido", "errores", "avisos"])
+            informes = EscritorInformes(sal)
         except Exception as ex:
             print("Error: no se pueden crear los informes en " + sal + ": " + str(ex))
             sys.exit(2)
-        tot = 0
-        val = 0
-        cerr = 0
-        stip = 0
-        por_tipo = {}
-        for n in d:
-            por_tipo[n] = 0
-        cats = {}
-        rutas = {}
-        for p in arch:
-            nom = os.path.basename(p)
-            incidencias = []
-            clasif = clasificar_archivo(nom, d)
-            tipo = ""
-            if clasif.tipo is None:
-                incidencias.append(Incidencia.sin_tipo())
-            else:
-                tipo = clasif.tipo.nombre
-                if clasif.ambigua:
-                    incidencias.append(Incidencia.varios_tipos(tipo, clasif.candidatos))
-                try:
-                    doc = leer_json(p)
-                    ok = True
-                except Exception as ex:
-                    incidencias.append(Incidencia.json_invalido(str(ex)))
-                    ok = False
-                if ok:
-                    incidencias = incidencias + ValidadorPropio(clasif.tipo.esquema, est).validar(doc)
-            if len(incidencias) > mx:
-                aux = len(incidencias)
-                incidencias = incidencias[:mx]
-                incidencias.append(Incidencia.incidencias_truncadas(mx, aux))
-            ne = 0
-            na = 0
-            for x in incidencias:
-                if x.es_error:
-                    ne = ne + 1
-                else:
-                    na = na + 1
-                w1.writerow([nom, tipo, x.nivel, x.categoria, x.ruta, x.esperado, x.encontrado, x.mensaje])
-                if x.categoria in cats:
-                    cats[x.categoria] = cats[x.categoria] + 1
-                else:
-                    cats[x.categoria] = 1
-                if tipo != "" and x.ruta != "":
-                    r = normalizar(x.ruta)
-                    if tipo not in rutas:
-                        rutas[tipo] = {}
-                    if r in rutas[tipo]:
-                        rutas[tipo][r] = rutas[tipo][r] + 1
-                    else:
-                        rutas[tipo][r] = 1
-            tot = tot + 1
-            if tipo == "":
-                stip = stip + 1
-                w2.writerow([nom, "", "no", ne, na])
-            else:
-                por_tipo[tipo] = por_tipo[tipo] + 1
-                if ne == 0:
-                    val = val + 1
-                    w2.writerow([nom, tipo, "si", ne, na])
-                else:
-                    cerr = cerr + 1
-                    w2.writerow([nom, tipo, "no", ne, na])
-        f1.close()
-        f2.close()
-        top = {}
-        for t in d:
-            if t in rutas:
-                tmp = sorted(rutas[t].items(), key=lambda x: (-x[1], x[0]))
-                top[t] = []
-                for x in tmp[:TOP_RUTAS]:
-                    top[t].append({"ruta": x[0], "incidencias": x[1]})
-        aux = {}
-        for c in sorted(cats):
-            aux[c] = cats[c]
+        validador = ValidadorLote(tipos, est, mx)
+        resumen = ResumenLote.para(tipos)
+        with informes:
+            for archivo in archivos:
+                resultado = validador.validar_archivo(archivo)
+                informes.escribir(resultado)
+                resumen.agregar(resultado)
         seg = round(time.perf_counter() - t0, 3)
-        res = {
-            "archivos_totales": tot,
-            "por_tipo": por_tipo,
-            "validos": val,
-            "con_errores": cerr,
-            "sin_tipo": stip,
-            "incidencias_por_categoria": aux,
-            "rutas_mas_frecuentes": top,
-            "tiempo_s": seg,
-        }
-        f = open(os.path.join(sal, ARCHIVO_RESUMEN_LOTE), "w", encoding="utf-8")
-        json.dump(res, f, indent=2, ensure_ascii=False)
-        f.close()
-        print("Archivos procesados: " + str(tot))
-        for t in por_tipo:
-            print("  " + t + ": " + str(por_tipo[t]))
-        print("  sin tipo: " + str(stip))
-        print("Válidos: " + str(val) + "  Con errores: " + str(cerr) + "  Sin tipo: " + str(stip))
-        n = 0
-        for c in aux:
-            n = n + aux[c]
-        print("Incidencias: " + str(n))
-        for c in aux:
-            print("  " + c + ": " + str(aux[c]))
-        print("Informes en: " + sal)
-        print("Tiempo total: " + str(seg) + " s")
-        if cerr > 0:
+        escribir_resumen_lote(sal, resumen, seg)
+        imprimir_resumen(sal, resumen, seg)
+        if resumen.con_errores > 0:
             sys.exit(1)
         sys.exit(0)
     else:

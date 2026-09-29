@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
-from gestor_json.modelos import Incidencia, NodoEsquema
+from gestor_json.modelos import Incidencia, NodoEsquema, TipoRegistrado
 from gestor_json.rutas import RUTA_RAIZ, clave_orden, ruta_campo, ruta_elemento
 from gestor_json.tipos_logicos import TipoLogico, clasificar_valor
 
@@ -61,3 +61,11 @@ class ValidadorPropio:
                 incidencias.append(Incidencia.campo_extra(
                     ruta_campo(ruta, clave), clave, clasificar_valor(valor).value,
                     self._estricto))
+
+
+FabricaValidador = Callable[[TipoRegistrado, bool], Validador]
+"""Crea el validador de un tipo: recibe el tipo y si la validación es estricta."""
+
+
+def crear_validador_propio(tipo: TipoRegistrado, estricto: bool) -> Validador:
+    return ValidadorPropio(tipo.esquema, estricto)

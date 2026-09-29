@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import random
 import sys
 import time
@@ -71,6 +72,25 @@ MAGNITUDES = (
     ("luz", "lux", 0.0, 1200.0),
 )
 ALERTAS = ("bateria_baja", "temperatura_alta", "sin_conexion", "calibracion_pendiente")
+
+# Deporte → (velocidad mínima, velocidad máxima en km/h, segundos entre puntos, fc base)
+DEPORTES = {
+    "carrera": (8.0, 14.0, (1, 3), 150),
+    "ciclismo": (18.0, 32.0, (1, 2), 135),
+    "senderismo": (3.0, 5.5, (3, 6), 115),
+}
+PENDIENTES = {"subida": (0.03, 0.09), "llano": (-0.01, 0.01), "bajada": (-0.09, -0.03)}
+PUNTOS_DE_SALIDA = (
+    (40.4168, -3.7038), (41.3874, 2.1686), (39.4699, -0.3763), (37.3891, -5.9845),
+    (43.2630, -2.9350), (42.8125, -1.6458), (40.9701, -5.6635), (42.8782, -8.5448),
+)
+NOMBRES_TRAMO = ("Salida", "Collado", "Ribera", "Pinar", "Mirador", "Puente", "Vega", "Llegada")
+ALIAS = ("trotamundos", "pedalero", "montanera", "liebre", "senderista", "cumbrera", "rodador")
+MODELOS_DISPOSITIVO = ("Rastreador GX-2", "Pulsera Trek 5", "Ciclocomputador C300", "Reloj Sendero S")
+SENSORES_EXTRA = ("barometro", "potencia", "brujula")
+UMBRALES_ZONAS_FC = (115, 135, 155, 170)  # límite superior de las zonas 1 a 4
+RADIO_TIERRA_M = 6_371_000.0
+METROS_POR_GRADO = 111_320.0
 
 
 @dataclass(frozen=True)
@@ -237,6 +257,168 @@ def modelos_lectura_sensor(rng: random.Random) -> list[dict[str, Any]]:
     ]
 
 
+# --------------------------------------------------------------------------- actividad
+
+def _distancia_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Distancia en metros entre dos coordenadas (fórmula del haversine)."""
+    fi1, fi2 = math.radians(lat1), math.radians(lat2)
+    delta_fi = fi2 - fi1
+    delta_lambda = math.radians(lon2 - lon1)
+    a = math.sin(delta_fi / 2) ** 2 + math.cos(fi1) * math.cos(fi2) * math.sin(delta_lambda / 2) ** 2
+    return 2 * RADIO_TIERRA_M * math.asin(math.sqrt(a))
+
+
+def _zona_fc(fc: int) -> int:
+    for zona, limite in enumerate(UMBRALES_ZONAS_FC, start=1):
+        if fc < limite:
+            return zona
+    return len(UMBRALES_ZONAS_FC) + 1
+
+
+def _repartir_puntos(rng: random.Random, total: int) -> list[int]:
+    """Divide ``total`` puntos (al menos 10) en entre 1 y 6 segmentos consecutivos."""
+    num_segmentos = rng.randint(1, max(1, min(6, total // 5)))
+    cortes = sorted(rng.sample(range(5, total - 4), num_segmentos - 1)) if num_segmentos > 1 else []
+    limites = [0, *cortes, total]
+    return [fin - inicio for inicio, fin in zip(limites, limites[1:])]
+
+
+def generar_actividad(
+    rng: random.Random,
+    indice: int,
+    *,
+    pequeno: bool = False,
+    deporte: str | None = None,
+    con_fc: bool | None = None,
+    con_cadencia: bool | None = None,
+    con_fotos: bool | None = None,
+    con_grasa: bool | None = None,
+    con_comentario: bool | None = None,
+    peso_decimal: bool | None = None,
+) -> dict[str, Any]:
+    """Genera una actividad deportiva registrada con GPS.
+
+    Los puntos forman un recorrido continuo (``t`` creciente y coordenadas cercanas) y el
+    resumen se calcula a partir de ellos.
+    """
+    deporte = deporte or rng.choice(list(DEPORTES))
+    velocidad_min, velocidad_max, (paso_min, paso_max), fc_base = DEPORTES[deporte]
+    con_fc = _decidir(rng, con_fc, 0.7)
+    con_cadencia = deporte != "senderismo" and _decidir(rng, con_cadencia, 0.6)
+    num_puntos = rng.randint(10, 30) if pequeno else int(rng.triangular(200, 5000, 900))
+
+    salida_lat, salida_lon = rng.choice(PUNTOS_DE_SALIDA)
+    lat = salida_lat + rng.uniform(-0.05, 0.05)
+    lon = salida_lon + rng.uniform(-0.05, 0.05)
+    alt = rng.uniform(20.0, 1200.0)
+    rumbo = rng.uniform(0.0, 2 * math.pi)
+    velocidad_ms = rng.uniform(velocidad_min, velocidad_max) / 3.6
+    t = 0
+    distancia_m = 0.0
+    desnivel_m = 0.0
+    segundos_por_zona = [0] * (len(UMBRALES_ZONAS_FC) + 1)
+
+    segmentos = []
+    for numero, puntos_del_segmento in enumerate(_repartir_puntos(rng, num_puntos), start=1):
+        tipo_tramo = rng.choice(list(PENDIENTES))
+        pendiente = rng.uniform(*PENDIENTES[tipo_tramo])
+        puntos = []
+        for _ in range(puntos_del_segmento):
+            if puntos or segmentos:
+                paso_s = rng.randint(paso_min, paso_max)
+                avance_m = velocidad_ms * paso_s * rng.uniform(0.8, 1.2)
+                rumbo += rng.gauss(0.0, 0.2)
+                nueva_lat = lat + avance_m * math.cos(rumbo) / METROS_POR_GRADO
+                nueva_lon = lon + avance_m * math.sin(rumbo) / (
+                    METROS_POR_GRADO * math.cos(math.radians(lat)))
+                nueva_alt = max(0.0, alt + avance_m * pendiente + rng.gauss(0.0, 0.3))
+                distancia_m += _distancia_m(lat, lon, nueva_lat, nueva_lon)
+                desnivel_m += max(0.0, nueva_alt - alt)
+                lat, lon, alt, t = nueva_lat, nueva_lon, nueva_alt, t + paso_s
+            else:
+                paso_s = 0
+            punto: dict[str, Any] = {
+                "lat": round(lat, 6),
+                "lon": round(lon, 6),
+                "alt": round(alt, 1),
+                "t": t,
+            }
+            # El pulsómetro pierde la señal en algún punto suelto.
+            if con_fc and rng.random() > 0.03:
+                fc = int(min(195, max(70, rng.gauss(fc_base + 150 * pendiente, 6))))
+                punto["fc"] = fc
+                segundos_por_zona[_zona_fc(fc) - 1] += paso_s
+            if con_cadencia:
+                punto["cadencia"] = rng.randint(75, 95) if deporte == "ciclismo" else rng.randint(160, 185)
+            puntos.append(punto)
+        segmentos.append({
+            "nombre": f"{rng.choice(NOMBRES_TRAMO)} {numero}",
+            "tipo": tipo_tramo,
+            "puntos": puntos,
+        })
+
+    sensores = ["pulsometro"] if con_fc else []
+    if con_cadencia:
+        sensores.append("cadencia")
+    if rng.random() < 0.4:
+        sensores.append(rng.choice(SENSORES_EXTRA))
+
+    usuario: dict[str, Any] = {
+        "id": f"USR-{rng.randint(1, 9999):04d}",
+        "alias": f"{rng.choice(ALIAS)}{rng.randint(1, 99)}",
+        "peso_kg": (round(rng.uniform(50.0, 95.0), 1) if _decidir(rng, peso_decimal, 0.5)
+                    else rng.randint(50, 95)),
+    }
+    if _decidir(rng, con_grasa, 0.4):
+        usuario["%grasa"] = round(rng.uniform(8.0, 30.0), 1)
+
+    duracion_s = t
+    actividad: dict[str, Any] = {
+        "id": f"ACT-{indice:06d}",
+        "deporte": deporte,
+        "inicio": _fecha_aleatoria(rng),
+        "privada": rng.random() < 0.2,
+        "usuario": usuario,
+        "dispositivo": {
+            "modelo": rng.choice(MODELOS_DISPOSITIVO),
+            "firmware": f"{rng.randint(2, 5)}.{rng.randint(0, 30)}.0",
+            "sensores": sensores,
+        },
+        "segmentos": segmentos,
+        "resumen": {
+            "distancia_km": round(distancia_m / 1000, 2),
+            "duracion_s": duracion_s,
+            "desnivel_m": round(desnivel_m, 1),
+            "velocidad_media": round(distancia_m / 1000 / (duracion_s / 3600), 2) if duracion_s else 0,
+        },
+    }
+    if con_fc:
+        actividad["pulso"] = {f"zona {n}": s for n, s in enumerate(segundos_por_zona, start=1)}
+    if _decidir(rng, con_fotos, 0.3):
+        todos_los_puntos = [p for s in segmentos for p in s["puntos"]]
+        actividad["fotos"] = [
+            {"archivo": f"IMG_{rng.randint(1000, 9999)}.jpg", "lat": p["lat"], "lon": p["lon"]}
+            for p in rng.sample(todos_los_puntos, rng.randint(1, 4))
+        ]
+    actividad["comentario"] = (
+        rng.choice(["Buenas sensaciones", "Mucho viento", "Ritmo suave", "Día de calor"])
+        if _decidir(rng, con_comentario, 0.4) else None
+    )
+    return actividad
+
+
+def modelos_actividad(rng: random.Random) -> list[dict[str, Any]]:
+    """Tres actividades válidas que cubren los campos opcionales y los que admiten ``null``."""
+    return [
+        generar_actividad(rng, 1, pequeno=True, deporte="carrera", con_fc=True, con_cadencia=True,
+                          con_fotos=True, con_grasa=True, con_comentario=True, peso_decimal=False),
+        generar_actividad(rng, 2, pequeno=True, deporte="ciclismo", con_fc=True, con_cadencia=True,
+                          con_fotos=False, con_grasa=False, con_comentario=False, peso_decimal=True),
+        generar_actividad(rng, 3, pequeno=True, deporte="senderismo", con_fc=False,
+                          con_fotos=True, con_grasa=False, con_comentario=False, peso_decimal=True),
+    ]
+
+
 # --------------------------------------------------------------------------- sin tipo
 
 def generar_sin_tipo(rng: random.Random, indice: int, *, pequeno: bool = False) -> dict[str, Any]:
@@ -251,9 +433,11 @@ def generar_sin_tipo(rng: random.Random, indice: int, *, pequeno: bool = False) 
 # --------------------------------------------------------------------------- lote
 
 TIPOS = (
-    TipoDocumento("pedido", "pedido", 0.50, generar_pedido, modelos_pedido),
-    TipoDocumento("lectura_sensor", "sensor", 0.47, generar_lectura_sensor,
+    TipoDocumento("pedido", "pedido", 0.45, generar_pedido, modelos_pedido),
+    TipoDocumento("lectura_sensor", "sensor", 0.40, generar_lectura_sensor,
                   modelos_lectura_sensor),
+    # Las actividades son mucho más grandes: menos archivos para que el lote no se dispare.
+    TipoDocumento("actividad", "ruta", 0.12, generar_actividad, modelos_actividad),
 )
 
 

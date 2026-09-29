@@ -15,21 +15,11 @@ from gestor_json.config import (
     EXTENSION_JSON,
     MAX_INCIDENCIAS_POR_DEFECTO,
     TOP_RUTAS,
-    Categoria,
-    Nivel,
 )
+from gestor_json.almacenamiento import esquema_a_dict, esquema_desde_dict
+from gestor_json.modelos import CampoEsquema, Incidencia, NodoEsquema
 from gestor_json.tipos_logicos import TipoLogico, clasificar_valor
 
-# Códigos de tipo del formato propio de esquemas.json
-CODIGOS = {
-    "bool": TipoLogico.BOOLEANO,
-    "list": TipoLogico.LISTA,
-    "num": TipoLogico.NUMERO,
-    "obj": TipoLogico.OBJETO,
-    "str": TipoLogico.TEXTO,
-    "unk": TipoLogico.DESCONOCIDO,
-}
-CODIGO_DE = {v: k for k, v in CODIGOS.items()}
 
 incidencias = []
 
@@ -37,185 +27,112 @@ incidencias = []
 def inferir(v):
     tl = clasificar_valor(v)
     if tl == TipoLogico.NULO:
-        return {"t": "unk", "nulo": True}
+        return NodoEsquema((TipoLogico.DESCONOCIDO,), admite_nulo=True)
     if tl == TipoLogico.OBJETO:
-        r = {"t": "obj", "nulo": False, "campos": {}}
+        r = NodoEsquema((TipoLogico.OBJETO,))
         for k in v:
-            r["campos"][k] = {"req": True, "esq": inferir(v[k])}
+            r.campos[k] = CampoEsquema(True, inferir(v[k]))
         return r
     if tl == TipoLogico.LISTA:
-        r = {"t": "list", "nulo": False, "item": {"t": "unk", "nulo": False}}
+        r = NodoEsquema((TipoLogico.LISTA,), item=NodoEsquema((TipoLogico.DESCONOCIDO,)))
         if len(v) > 0:
             tmp = inferir(v[0])
             for i in range(1, len(v)):
                 tmp = fusionar(tmp, inferir(v[i]))
-            r["item"] = tmp
+            r.item = tmp
         return r
-    return {"t": CODIGO_DE[tl], "nulo": False}
+    return NodoEsquema((tl,))
 
 
 def fusionar(a, b):
-    if type(a["t"]) == list:
-        ta = a["t"]
-    else:
-        ta = [a["t"]]
-    if type(b["t"]) == list:
-        tb = b["t"]
-    else:
-        tb = [b["t"]]
     tt = []
-    for x in ta:
+    for x in a.tipos + b.tipos:
         if x not in tt:
             tt.append(x)
-    for x in tb:
-        if x not in tt:
-            tt.append(x)
-    if "unk" in tt and len(tt) > 1:
-        tt.remove("unk")
-    tt.sort()
-    r = {"t": None, "nulo": a["nulo"] or b["nulo"]}
-    if len(tt) == 1:
-        r["t"] = tt[0]
-    else:
-        r["t"] = tt
-    if "obj" in tt:
-        if "obj" in ta and "obj" in tb:
-            aux = {}
-            for k in a["campos"]:
-                if k in b["campos"]:
-                    aux[k] = {
-                        "req": a["campos"][k]["req"] and b["campos"][k]["req"],
-                        "esq": fusionar(a["campos"][k]["esq"], b["campos"][k]["esq"]),
-                    }
+    if TipoLogico.DESCONOCIDO in tt and len(tt) > 1:
+        tt.remove(TipoLogico.DESCONOCIDO)
+    orden = list(TipoLogico)
+    tt.sort(key=orden.index)
+    r = NodoEsquema(tuple(tt), a.admite_nulo or b.admite_nulo)
+    if TipoLogico.OBJETO in tt:
+        if TipoLogico.OBJETO in a.tipos and TipoLogico.OBJETO in b.tipos:
+            for k in a.campos:
+                if k in b.campos:
+                    r.campos[k] = CampoEsquema(
+                        a.campos[k].obligatorio and b.campos[k].obligatorio,
+                        fusionar(a.campos[k].esquema, b.campos[k].esquema),
+                    )
                 else:
-                    aux[k] = {"req": False, "esq": a["campos"][k]["esq"]}
-            for k in b["campos"]:
-                if k not in a["campos"]:
-                    aux[k] = {"req": False, "esq": b["campos"][k]["esq"]}
-            r["campos"] = aux
+                    r.campos[k] = CampoEsquema(False, a.campos[k].esquema)
+            for k in b.campos:
+                if k not in a.campos:
+                    r.campos[k] = CampoEsquema(False, b.campos[k].esquema)
         else:
-            if "obj" in ta:
-                r["campos"] = a["campos"]
+            if TipoLogico.OBJETO in a.tipos:
+                r.campos = a.campos
             else:
-                r["campos"] = b["campos"]
-    if "list" in tt:
-        if "list" in ta and "list" in tb:
-            r["item"] = fusionar(a["item"], b["item"])
+                r.campos = b.campos
+    if TipoLogico.LISTA in tt:
+        if TipoLogico.LISTA in a.tipos and TipoLogico.LISTA in b.tipos:
+            r.item = fusionar(a.item, b.item)
         else:
-            if "list" in ta:
-                r["item"] = a["item"]
+            if TipoLogico.LISTA in a.tipos:
+                r.item = a.item
             else:
-                r["item"] = b["item"]
+                r.item = b.item
     return r
 
 
-def desc(e):
-    if type(e["t"]) == list:
-        tt = e["t"]
-    else:
-        tt = [e["t"]]
-    s = ""
-    for x in tt:
-        n = CODIGOS[x].value
-        if s != "":
-            s = s + " | "
-        s = s + n
-    if e["nulo"]:
-        s = s + " | nulo"
-    return s
-
-
 def imprimir(e, nombre, nivel):
-    print("  " * nivel + nombre + ": " + desc(e))
-    if type(e["t"]) == list:
-        tt = e["t"]
-    else:
-        tt = [e["t"]]
-    if "obj" in tt:
-        for k in e["campos"]:
-            if e["campos"][k]["req"]:
-                imprimir(e["campos"][k]["esq"], k, nivel + 1)
+    print("  " * nivel + nombre + ": " + e.describir())
+    if TipoLogico.OBJETO in e.tipos:
+        for k in e.campos:
+            if e.campos[k].obligatorio:
+                imprimir(e.campos[k].esquema, k, nivel + 1)
             else:
-                imprimir(e["campos"][k]["esq"], k + " (opcional)", nivel + 1)
-    if "list" in tt:
-        imprimir(e["item"], "[]", nivel + 1)
+                imprimir(e.campos[k].esquema, k + " (opcional)", nivel + 1)
+    if TipoLogico.LISTA in e.tipos:
+        imprimir(e.item, "[]", nivel + 1)
 
 
 def validar(v, e, ruta, est):
     global incidencias
-    if type(e["t"]) == list:
-        tt = e["t"]
-    else:
-        tt = [e["t"]]
-    if "unk" in tt:
+    if e.acepta_cualquier_valor:
         return
-    if v is None:
-        if e["nulo"] == False:
-            incidencias.append({
-                "nivel": Nivel.ERROR,
-                "categoria": Categoria.NULO_NO_PERMITIDO,
-                "ruta": ruta,
-                "esperado": desc(e),
-                "encontrado": "nulo",
-                "mensaje": "Valor nulo no permitido: se esperaba " + desc(e),
-            })
+    tv = clasificar_valor(v)
+    if tv == TipoLogico.NULO:
+        if not e.admite_nulo:
+            incidencias.append(Incidencia.nulo_no_permitido(ruta, e.describir()))
         return
-    tv = CODIGO_DE[clasificar_valor(v)]
-    if tv not in tt:
-        incidencias.append({
-            "nivel": Nivel.ERROR,
-            "categoria": Categoria.TIPO_INCORRECTO,
-            "ruta": ruta,
-            "esperado": desc(e),
-            "encontrado": desc({"t": tv, "nulo": False}),
-            "mensaje": "Tipo incorrecto: se esperaba " + desc(e) + " y se encontró " + desc({"t": tv, "nulo": False}),
-        })
+    if tv not in e.tipos:
+        incidencias.append(Incidencia.tipo_incorrecto(ruta, e.describir(), tv.value))
         return
-    if tv == "obj":
-        for k in e["campos"]:
+    if tv == TipoLogico.OBJETO:
+        for k in e.campos:
             if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", k):
                 r = ruta + "." + k
             else:
                 r = ruta + "[" + json.dumps(k, ensure_ascii=False) + "]"
             if k in v:
-                validar(v[k], e["campos"][k]["esq"], r, est)
+                validar(v[k], e.campos[k].esquema, r, est)
             else:
-                if e["campos"][k]["req"]:
-                    incidencias.append({
-                        "nivel": Nivel.ERROR,
-                        "categoria": Categoria.FALTA_CAMPO,
-                        "ruta": r,
-                        "esperado": desc(e["campos"][k]["esq"]),
-                        "encontrado": "ausente",
-                        "mensaje": "Falta el campo obligatorio '" + k + "'",
-                    })
+                if e.campos[k].obligatorio:
+                    incidencias.append(Incidencia.falta_campo(r, k, e.campos[k].esquema.describir()))
         for k in v:
-            if k not in e["campos"]:
+            if k not in e.campos:
                 if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", k):
                     r = ruta + "." + k
                 else:
                     r = ruta + "[" + json.dumps(k, ensure_ascii=False) + "]"
-                aux = clasificar_valor(v[k]).value
-                if est:
-                    tmp = Nivel.ERROR
-                else:
-                    tmp = Nivel.AVISO
-                incidencias.append({
-                    "nivel": tmp,
-                    "categoria": Categoria.CAMPO_EXTRA,
-                    "ruta": r,
-                    "esperado": "ausente",
-                    "encontrado": aux,
-                    "mensaje": "Campo no previsto en el esquema: '" + k + "'",
-                })
-    if tv == "list":
+                incidencias.append(Incidencia.campo_extra(r, k, clasificar_valor(v[k]).value, est))
+    if tv == TipoLogico.LISTA:
         for i in range(len(v)):
-            validar(v[i], e["item"], ruta + "[" + str(i) + "]", est)
+            validar(v[i], e.item, ruta + "[" + str(i) + "]", est)
 
 
 def clave_orden(x):
     aux = []
-    for m in re.finditer(r'\.([A-Za-z_][A-Za-z0-9_]*)|\[(\d+)\]|\[("(?:[^"\\]|\\.)*")\]', x["ruta"]):
+    for m in re.finditer(r'\.([A-Za-z_][A-Za-z0-9_]*)|\[(\d+)\]|\[("(?:[^"\\]|\\.)*")\]', x.ruta):
         if m.group(1) is not None:
             aux.append((0, m.group(1)))
         elif m.group(2) is not None:
@@ -265,6 +182,8 @@ def main():
                 f = open(ARCHIVO_ESQUEMAS, encoding="utf-8-sig")
                 d = json.load(f)
                 f.close()
+                for n in d["tipos"]:
+                    d["tipos"][n]["esquema"] = esquema_desde_dict(d["tipos"][n]["esquema"])
             except Exception as ex:
                 print("Error: no se puede leer esquemas.json: " + str(ex))
                 sys.exit(2)
@@ -293,7 +212,11 @@ def main():
             "esquema": e,
         }
         f = open(ARCHIVO_ESQUEMAS, "w", encoding="utf-8")
-        json.dump(d, f, indent=2, ensure_ascii=False)
+        tmp = {"tipos": {}}
+        for n in d["tipos"]:
+            tmp["tipos"][n] = dict(d["tipos"][n])
+            tmp["tipos"][n]["esquema"] = esquema_a_dict(d["tipos"][n]["esquema"])
+        json.dump(tmp, f, indent=2, ensure_ascii=False)
         f.close()
         print("Tipo '" + tipo + "' registrado con " + str(len(mods)) + " modelo(s) (patrón: " + pat + ")")
     elif cmd == "actualizar":
@@ -321,6 +244,8 @@ def main():
                 f = open(ARCHIVO_ESQUEMAS, encoding="utf-8-sig")
                 d = json.load(f)
                 f.close()
+                for n in d["tipos"]:
+                    d["tipos"][n]["esquema"] = esquema_desde_dict(d["tipos"][n]["esquema"])
             except Exception as ex:
                 print("Error: no se puede leer esquemas.json: " + str(ex))
                 sys.exit(2)
@@ -342,7 +267,11 @@ def main():
         d["tipos"][tipo]["esquema"] = e
         d["tipos"][tipo]["modelos_usados"] = d["tipos"][tipo]["modelos_usados"] + len(mods)
         f = open(ARCHIVO_ESQUEMAS, "w", encoding="utf-8")
-        json.dump(d, f, indent=2, ensure_ascii=False)
+        tmp = {"tipos": {}}
+        for n in d["tipos"]:
+            tmp["tipos"][n] = dict(d["tipos"][n])
+            tmp["tipos"][n]["esquema"] = esquema_a_dict(d["tipos"][n]["esquema"])
+        json.dump(tmp, f, indent=2, ensure_ascii=False)
         f.close()
         print("Tipo '" + tipo + "' actualizado: " + str(d["tipos"][tipo]["modelos_usados"]) + " modelo(s) en total")
     elif cmd == "tipos":
@@ -354,6 +283,8 @@ def main():
                 f = open(ARCHIVO_ESQUEMAS, encoding="utf-8-sig")
                 d = json.load(f)
                 f.close()
+                for n in d["tipos"]:
+                    d["tipos"][n]["esquema"] = esquema_desde_dict(d["tipos"][n]["esquema"])
             except Exception as ex:
                 print("Error: no se puede leer esquemas.json: " + str(ex))
                 sys.exit(2)
@@ -384,6 +315,8 @@ def main():
                 f = open(ARCHIVO_ESQUEMAS, encoding="utf-8-sig")
                 d = json.load(f)
                 f.close()
+                for n in d["tipos"]:
+                    d["tipos"][n]["esquema"] = esquema_desde_dict(d["tipos"][n]["esquema"])
             except Exception as ex:
                 print("Error: no se puede leer esquemas.json: " + str(ex))
                 sys.exit(2)
@@ -416,6 +349,8 @@ def main():
                 f = open(ARCHIVO_ESQUEMAS, encoding="utf-8-sig")
                 d = json.load(f)
                 f.close()
+                for n in d["tipos"]:
+                    d["tipos"][n]["esquema"] = esquema_desde_dict(d["tipos"][n]["esquema"])
             except Exception as ex:
                 print("Error: no se puede leer esquemas.json: " + str(ex))
                 sys.exit(2)
@@ -426,7 +361,11 @@ def main():
             sys.exit(2)
         del d["tipos"][tipo]
         f = open(ARCHIVO_ESQUEMAS, "w", encoding="utf-8")
-        json.dump(d, f, indent=2, ensure_ascii=False)
+        tmp = {"tipos": {}}
+        for n in d["tipos"]:
+            tmp["tipos"][n] = dict(d["tipos"][n])
+            tmp["tipos"][n]["esquema"] = esquema_a_dict(d["tipos"][n]["esquema"])
+        json.dump(tmp, f, indent=2, ensure_ascii=False)
         f.close()
         print("Tipo '" + tipo + "' eliminado")
     elif cmd == "validar":
@@ -476,6 +415,8 @@ def main():
                 f = open(ARCHIVO_ESQUEMAS, encoding="utf-8-sig")
                 d = json.load(f)
                 f.close()
+                for n in d["tipos"]:
+                    d["tipos"][n]["esquema"] = esquema_desde_dict(d["tipos"][n]["esquema"])
             except Exception as ex:
                 print("Error: no se puede leer esquemas.json: " + str(ex))
                 sys.exit(2)
@@ -517,14 +458,7 @@ def main():
                     cands.append(n)
             tipo = ""
             if len(cands) == 0:
-                incidencias.append({
-                    "nivel": Nivel.AVISO,
-                    "categoria": Categoria.SIN_TIPO,
-                    "ruta": "",
-                    "esperado": "",
-                    "encontrado": "",
-                    "mensaje": "El nombre del archivo no encaja con ningún patrón registrado",
-                })
+                incidencias.append(Incidencia.sin_tipo())
             else:
                 tipo = cands[0]
                 if len(cands) > 1:
@@ -537,28 +471,14 @@ def main():
                         if lit > best:
                             best = lit
                             tipo = c
-                    incidencias.append({
-                        "nivel": Nivel.AVISO,
-                        "categoria": Categoria.VARIOS_TIPOS,
-                        "ruta": "",
-                        "esperado": tipo,
-                        "encontrado": ", ".join(cands),
-                        "mensaje": "El nombre encaja con varios patrones (" + ", ".join(cands) + "); se usa '" + tipo + "'",
-                    })
+                    incidencias.append(Incidencia.varios_tipos(tipo, cands))
                 try:
                     f = open(p, encoding="utf-8-sig")
                     doc = json.load(f)
                     f.close()
                     ok = True
                 except Exception as ex:
-                    incidencias.append({
-                        "nivel": Nivel.ERROR,
-                        "categoria": Categoria.JSON_INVALIDO,
-                        "ruta": "$",
-                        "esperado": "",
-                        "encontrado": "",
-                        "mensaje": "El archivo no es un JSON válido: " + str(ex),
-                    })
+                    incidencias.append(Incidencia.json_invalido(str(ex)))
                     ok = False
                 if ok:
                     aux = len(incidencias)
@@ -569,28 +489,21 @@ def main():
             if len(incidencias) > mx:
                 aux = len(incidencias)
                 incidencias = incidencias[:mx]
-                incidencias.append({
-                    "nivel": Nivel.AVISO,
-                    "categoria": Categoria.INCIDENCIAS_TRUNCADAS,
-                    "ruta": "",
-                    "esperado": str(mx),
-                    "encontrado": str(aux),
-                    "mensaje": "Se han encontrado " + str(aux) + " incidencias; solo se incluyen las primeras " + str(mx),
-                })
+                incidencias.append(Incidencia.incidencias_truncadas(mx, aux))
             ne = 0
             na = 0
             for x in incidencias:
-                if x["nivel"] == Nivel.ERROR:
+                if x.es_error:
                     ne = ne + 1
                 else:
                     na = na + 1
-                w1.writerow([nom, tipo, x["nivel"], x["categoria"], x["ruta"], x["esperado"], x["encontrado"], x["mensaje"]])
-                if x["categoria"] in cats:
-                    cats[x["categoria"]] = cats[x["categoria"]] + 1
+                w1.writerow([nom, tipo, x.nivel, x.categoria, x.ruta, x.esperado, x.encontrado, x.mensaje])
+                if x.categoria in cats:
+                    cats[x.categoria] = cats[x.categoria] + 1
                 else:
-                    cats[x["categoria"]] = 1
-                if tipo != "" and x["ruta"] != "":
-                    r = re.sub(r"\[\d+\]", "[*]", x["ruta"])
+                    cats[x.categoria] = 1
+                if tipo != "" and x.ruta != "":
+                    r = re.sub(r"\[\d+\]", "[*]", x.ruta)
                     if tipo not in rutas:
                         rutas[tipo] = {}
                     if r in rutas[tipo]:

@@ -737,3 +737,24 @@ def test_salida_que_no_se_puede_crear(cli):
 
     assert codigo == 2
     assert salida.startswith("Error: no se pueden crear los informes en ocupado: ")
+
+
+# --------------------------------------------------------------------------- diferencias con la versión legacy
+
+# Casos extremos de argumentos que cambiaron al pasar a argparse (aceptados de forma explícita).
+# La versión legacy rechazaba "--tipo=x" ("argumento no reconocido: --tipo=x") y, con
+# "--tipo --patron x", tomaba "--patron" como nombre del tipo y fallaba con "x".
+
+def test_diferencia_opcion_con_igual_se_acepta(cli):
+    codigo, salida = cli("registrar", "--tipo=nuevo", "--patron=n_*.json", "--modelo", VACIO)
+
+    assert codigo == 0
+    assert salida == "Tipo 'nuevo' registrado con 1 modelo(s) (patrón: n_*.json)\n"
+    assert list(leer_esquemas()["tipos"]) == ["nuevo"]
+
+
+def test_diferencia_opcion_sin_valor_seguida_de_otra_opcion(cli):
+    codigo, salida = cli("registrar", "--tipo", "--patron", "n_*.json", "--modelo", VACIO)
+
+    assert (codigo, salida) == (2, "Error: argumento no reconocido: --tipo\n")
+    assert not Path("esquemas.json").exists()

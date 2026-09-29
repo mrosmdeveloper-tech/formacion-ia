@@ -1,7 +1,10 @@
 import sys
 import os
 import json
+import fnmatch
 from datetime import datetime
+
+incidencias = []
 
 
 def inferir(v):
@@ -130,9 +133,10 @@ def imprimir(e, nombre, nivel):
 
 
 def main():
+    global incidencias
     if len(sys.argv) < 2:
         print("Uso: python gestor.py <comando> [opciones]")
-        print("Comandos: registrar, actualizar, tipos, mostrar, eliminar")
+        print("Comandos: registrar, actualizar, tipos, mostrar, eliminar, validar")
         sys.exit(2)
     cmd = sys.argv[1]
     args = sys.argv[2:]
@@ -332,6 +336,85 @@ def main():
         json.dump(d, f, indent=2, ensure_ascii=False)
         f.close()
         print("Tipo '" + tipo + "' eliminado")
+    elif cmd == "validar":
+        ruta = None
+        i = 0
+        while i < len(args):
+            if args[i].startswith("--"):
+                print("Error: argumento no reconocido: " + args[i])
+                sys.exit(2)
+            elif ruta is None:
+                ruta = args[i]
+                i = i + 1
+            else:
+                print("Error: argumento no reconocido: " + args[i])
+                sys.exit(2)
+        if ruta is None:
+            print("Error: falta el archivo o la carpeta a validar")
+            sys.exit(2)
+        if not os.path.exists(ruta):
+            print("Error: no existe " + ruta)
+            sys.exit(2)
+        if os.path.exists("esquemas.json"):
+            try:
+                f = open("esquemas.json", encoding="utf-8-sig")
+                d = json.load(f)
+                f.close()
+            except Exception as ex:
+                print("Error: no se puede leer esquemas.json: " + str(ex))
+                sys.exit(2)
+        else:
+            d = {"tipos": {}}
+        if os.path.isdir(ruta):
+            arch = []
+            for n in sorted(os.listdir(ruta)):
+                if os.path.isfile(os.path.join(ruta, n)) and n.lower().endswith(".json"):
+                    arch.append(os.path.join(ruta, n))
+        else:
+            arch = [ruta]
+        for p in arch:
+            nom = os.path.basename(p)
+            incidencias = []
+            cands = []
+            for n in d["tipos"]:
+                if fnmatch.fnmatchcase(nom, d["tipos"][n]["patron"]):
+                    cands.append(n)
+            tipo = ""
+            if len(cands) == 0:
+                incidencias.append({
+                    "nivel": "aviso",
+                    "categoria": "sin_tipo",
+                    "ruta": "",
+                    "esperado": "",
+                    "encontrado": "",
+                    "mensaje": "El nombre del archivo no encaja con ningún patrón registrado",
+                })
+            else:
+                tipo = cands[0]
+                if len(cands) > 1:
+                    best = -1
+                    for c in cands:
+                        lit = 0
+                        for ch in d["tipos"][c]["patron"]:
+                            if ch != "*" and ch != "?":
+                                lit = lit + 1
+                        if lit > best:
+                            best = lit
+                            tipo = c
+                    incidencias.append({
+                        "nivel": "aviso",
+                        "categoria": "varios_tipos",
+                        "ruta": "",
+                        "esperado": tipo,
+                        "encontrado": ", ".join(cands),
+                        "mensaje": "El nombre encaja con varios patrones (" + ", ".join(cands) + "); se usa '" + tipo + "'",
+                    })
+            if tipo == "":
+                print(nom + " -> (sin tipo)")
+            else:
+                print(nom + " -> " + tipo)
+            for x in incidencias:
+                print("  [" + x["nivel"] + "] " + x["categoria"] + " " + x["ruta"] + ": " + x["mensaje"])
     else:
         print("Error: comando desconocido: " + cmd)
         sys.exit(2)

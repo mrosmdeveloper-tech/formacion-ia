@@ -84,10 +84,55 @@ def fusionar(a, b):
     return r
 
 
+def desc(e):
+    if type(e["t"]) == list:
+        tt = e["t"]
+    else:
+        tt = [e["t"]]
+    s = ""
+    for x in tt:
+        if x == "str":
+            n = "texto"
+        elif x == "num":
+            n = "numero"
+        elif x == "bool":
+            n = "booleano"
+        elif x == "obj":
+            n = "objeto"
+        elif x == "list":
+            n = "lista"
+        elif x == "unk":
+            n = "desconocido"
+        else:
+            n = x
+        if s != "":
+            s = s + " | "
+        s = s + n
+    if e["nulo"]:
+        s = s + " | nulo"
+    return s
+
+
+def imprimir(e, nombre, nivel):
+    print("  " * nivel + nombre + ": " + desc(e))
+    if type(e["t"]) == list:
+        tt = e["t"]
+    else:
+        tt = [e["t"]]
+    if "obj" in tt:
+        for k in e["campos"]:
+            if e["campos"][k]["req"]:
+                imprimir(e["campos"][k]["esq"], k, nivel + 1)
+            else:
+                imprimir(e["campos"][k]["esq"], k + " (opcional)", nivel + 1)
+    if "list" in tt:
+        imprimir(e["item"], "[]", nivel + 1)
+
+
 def main():
     if len(sys.argv) < 2:
         print("Uso: python gestor.py <comando> [opciones]")
-        print("Comandos: registrar")
+        print("Comandos: registrar, actualizar, tipos, mostrar, eliminar")
         sys.exit(2)
     cmd = sys.argv[1]
     args = sys.argv[2:]
@@ -154,6 +199,139 @@ def main():
         json.dump(d, f, indent=2, ensure_ascii=False)
         f.close()
         print("Tipo '" + tipo + "' registrado con " + str(len(mods)) + " modelo(s) (patrón: " + pat + ")")
+    elif cmd == "actualizar":
+        tipo = None
+        mods = []
+        i = 0
+        while i < len(args):
+            if args[i] == "--tipo" and i + 1 < len(args):
+                tipo = args[i + 1]
+                i = i + 2
+            elif args[i] == "--modelo" and i + 1 < len(args):
+                mods.append(args[i + 1])
+                i = i + 2
+            else:
+                print("Error: argumento no reconocido: " + args[i])
+                sys.exit(2)
+        if tipo is None:
+            print("Error: falta --tipo")
+            sys.exit(2)
+        if len(mods) == 0:
+            print("Error: hay que indicar al menos un --modelo")
+            sys.exit(2)
+        if os.path.exists("esquemas.json"):
+            try:
+                f = open("esquemas.json", encoding="utf-8-sig")
+                d = json.load(f)
+                f.close()
+            except Exception as ex:
+                print("Error: no se puede leer esquemas.json: " + str(ex))
+                sys.exit(2)
+        else:
+            d = {"tipos": {}}
+        if tipo not in d["tipos"]:
+            print("Error: el tipo '" + tipo + "' no existe")
+            sys.exit(2)
+        e = d["tipos"][tipo]["esquema"]
+        for m in mods:
+            try:
+                f = open(m, encoding="utf-8-sig")
+                v = json.load(f)
+                f.close()
+            except Exception as ex:
+                print("Error: no se puede leer el modelo " + m + ": " + str(ex))
+                sys.exit(2)
+            e = fusionar(e, inferir(v))
+        d["tipos"][tipo]["esquema"] = e
+        d["tipos"][tipo]["modelos_usados"] = d["tipos"][tipo]["modelos_usados"] + len(mods)
+        f = open("esquemas.json", "w", encoding="utf-8")
+        json.dump(d, f, indent=2, ensure_ascii=False)
+        f.close()
+        print("Tipo '" + tipo + "' actualizado: " + str(d["tipos"][tipo]["modelos_usados"]) + " modelo(s) en total")
+    elif cmd == "tipos":
+        if len(args) > 0:
+            print("Error: argumento no reconocido: " + args[0])
+            sys.exit(2)
+        if os.path.exists("esquemas.json"):
+            try:
+                f = open("esquemas.json", encoding="utf-8-sig")
+                d = json.load(f)
+                f.close()
+            except Exception as ex:
+                print("Error: no se puede leer esquemas.json: " + str(ex))
+                sys.exit(2)
+        else:
+            d = {"tipos": {}}
+        if len(d["tipos"]) == 0:
+            print("No hay tipos registrados")
+        else:
+            print("TIPO".ljust(20) + "PATRÓN".ljust(22) + "MODELOS".rjust(7) + "  REGISTRADO")
+            for n in d["tipos"]:
+                tmp = d["tipos"][n]
+                print(n.ljust(20) + tmp["patron"].ljust(22) + str(tmp["modelos_usados"]).rjust(7) + "  " + tmp["registrado"])
+    elif cmd == "mostrar":
+        tipo = None
+        i = 0
+        while i < len(args):
+            if args[i] == "--tipo" and i + 1 < len(args):
+                tipo = args[i + 1]
+                i = i + 2
+            else:
+                print("Error: argumento no reconocido: " + args[i])
+                sys.exit(2)
+        if tipo is None:
+            print("Error: falta --tipo")
+            sys.exit(2)
+        if os.path.exists("esquemas.json"):
+            try:
+                f = open("esquemas.json", encoding="utf-8-sig")
+                d = json.load(f)
+                f.close()
+            except Exception as ex:
+                print("Error: no se puede leer esquemas.json: " + str(ex))
+                sys.exit(2)
+        else:
+            d = {"tipos": {}}
+        if tipo not in d["tipos"]:
+            print("Error: el tipo '" + tipo + "' no existe")
+            sys.exit(2)
+        print("Tipo: " + tipo)
+        print("Patrón: " + d["tipos"][tipo]["patron"])
+        print("Modelos usados: " + str(d["tipos"][tipo]["modelos_usados"]))
+        print("Registrado: " + d["tipos"][tipo]["registrado"])
+        print("Esquema:")
+        imprimir(d["tipos"][tipo]["esquema"], "$", 0)
+    elif cmd == "eliminar":
+        tipo = None
+        i = 0
+        while i < len(args):
+            if args[i] == "--tipo" and i + 1 < len(args):
+                tipo = args[i + 1]
+                i = i + 2
+            else:
+                print("Error: argumento no reconocido: " + args[i])
+                sys.exit(2)
+        if tipo is None:
+            print("Error: falta --tipo")
+            sys.exit(2)
+        if os.path.exists("esquemas.json"):
+            try:
+                f = open("esquemas.json", encoding="utf-8-sig")
+                d = json.load(f)
+                f.close()
+            except Exception as ex:
+                print("Error: no se puede leer esquemas.json: " + str(ex))
+                sys.exit(2)
+        else:
+            d = {"tipos": {}}
+        if tipo not in d["tipos"]:
+            print("Error: el tipo '" + tipo + "' no existe")
+            sys.exit(2)
+        del d["tipos"][tipo]
+        f = open("esquemas.json", "w", encoding="utf-8")
+        json.dump(d, f, indent=2, ensure_ascii=False)
+        f.close()
+        print("Tipo '" + tipo + "' eliminado")
     else:
         print("Error: comando desconocido: " + cmd)
         sys.exit(2)

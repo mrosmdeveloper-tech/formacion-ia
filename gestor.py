@@ -1,13 +1,9 @@
 import sys
 import os
-import json
-import fnmatch
 import csv
 import time
-from datetime import datetime
 
 from gestor_json.config import (
-    ARCHIVO_ESQUEMAS,
     ARCHIVO_INCIDENCIAS,
     ARCHIVO_RESUMEN_ARCHIVOS,
     ARCHIVO_RESUMEN_LOTE,
@@ -15,15 +11,13 @@ from gestor_json.config import (
     MAX_INCIDENCIAS_POR_DEFECTO,
     TOP_RUTAS,
 )
-from gestor_json.almacenamiento import esquema_a_dict, esquema_desde_dict
-from gestor_json.fusion import fusionar
-from gestor_json.inferencia import inferir_esquema
-from gestor_json.modelos import Incidencia
+from gestor_json.almacenamiento import AlmacenEsquemasPropio, leer_json
+from gestor_json.modelos import ErrorGestor, Incidencia
+from gestor_json.registro import RegistroTipos, clasificar_archivo
 from gestor_json.rutas import normalizar
 from gestor_json.tipos_logicos import TipoLogico
 from gestor_json.validacion import ValidadorPropio
-
-
+import json
 
 
 def imprimir(e, nombre, nivel):
@@ -39,6 +33,15 @@ def imprimir(e, nombre, nivel):
 
 
 def main():
+    try:
+        comando()
+    except ErrorGestor as ex:
+        print("Error: " + str(ex))
+        sys.exit(2)
+
+
+def comando():
+    registro = RegistroTipos(AlmacenEsquemasPropio())
     if len(sys.argv) < 2:
         print("Uso: python gestor.py <comando> [opciones]")
         print("Comandos: registrar, actualizar, tipos, mostrar, eliminar, validar")
@@ -72,47 +75,7 @@ def main():
         if len(mods) == 0:
             print("Error: hay que indicar al menos un --modelo")
             sys.exit(2)
-        if os.path.exists(ARCHIVO_ESQUEMAS):
-            try:
-                f = open(ARCHIVO_ESQUEMAS, encoding="utf-8-sig")
-                d = json.load(f)
-                f.close()
-                for n in d["tipos"]:
-                    d["tipos"][n]["esquema"] = esquema_desde_dict(d["tipos"][n]["esquema"])
-            except Exception as ex:
-                print("Error: no se puede leer esquemas.json: " + str(ex))
-                sys.exit(2)
-        else:
-            d = {"tipos": {}}
-        if tipo in d["tipos"]:
-            print("Error: el tipo '" + tipo + "' ya existe")
-            sys.exit(2)
-        e = None
-        for m in mods:
-            try:
-                f = open(m, encoding="utf-8-sig")
-                v = json.load(f)
-                f.close()
-            except Exception as ex:
-                print("Error: no se puede leer el modelo " + m + ": " + str(ex))
-                sys.exit(2)
-            if e is None:
-                e = inferir_esquema(v)
-            else:
-                e = fusionar(e, inferir_esquema(v))
-        d["tipos"][tipo] = {
-            "patron": pat,
-            "modelos_usados": len(mods),
-            "registrado": datetime.now().isoformat(timespec="seconds"),
-            "esquema": e,
-        }
-        f = open(ARCHIVO_ESQUEMAS, "w", encoding="utf-8")
-        tmp = {"tipos": {}}
-        for n in d["tipos"]:
-            tmp["tipos"][n] = dict(d["tipos"][n])
-            tmp["tipos"][n]["esquema"] = esquema_a_dict(d["tipos"][n]["esquema"])
-        json.dump(tmp, f, indent=2, ensure_ascii=False)
-        f.close()
+        registro.registrar(tipo, pat, mods)
         print("Tipo '" + tipo + "' registrado con " + str(len(mods)) + " modelo(s) (patrón: " + pat + ")")
     elif cmd == "actualizar":
         tipo = None
@@ -134,64 +97,19 @@ def main():
         if len(mods) == 0:
             print("Error: hay que indicar al menos un --modelo")
             sys.exit(2)
-        if os.path.exists(ARCHIVO_ESQUEMAS):
-            try:
-                f = open(ARCHIVO_ESQUEMAS, encoding="utf-8-sig")
-                d = json.load(f)
-                f.close()
-                for n in d["tipos"]:
-                    d["tipos"][n]["esquema"] = esquema_desde_dict(d["tipos"][n]["esquema"])
-            except Exception as ex:
-                print("Error: no se puede leer esquemas.json: " + str(ex))
-                sys.exit(2)
-        else:
-            d = {"tipos": {}}
-        if tipo not in d["tipos"]:
-            print("Error: el tipo '" + tipo + "' no existe")
-            sys.exit(2)
-        e = d["tipos"][tipo]["esquema"]
-        for m in mods:
-            try:
-                f = open(m, encoding="utf-8-sig")
-                v = json.load(f)
-                f.close()
-            except Exception as ex:
-                print("Error: no se puede leer el modelo " + m + ": " + str(ex))
-                sys.exit(2)
-            e = fusionar(e, inferir_esquema(v))
-        d["tipos"][tipo]["esquema"] = e
-        d["tipos"][tipo]["modelos_usados"] = d["tipos"][tipo]["modelos_usados"] + len(mods)
-        f = open(ARCHIVO_ESQUEMAS, "w", encoding="utf-8")
-        tmp = {"tipos": {}}
-        for n in d["tipos"]:
-            tmp["tipos"][n] = dict(d["tipos"][n])
-            tmp["tipos"][n]["esquema"] = esquema_a_dict(d["tipos"][n]["esquema"])
-        json.dump(tmp, f, indent=2, ensure_ascii=False)
-        f.close()
-        print("Tipo '" + tipo + "' actualizado: " + str(d["tipos"][tipo]["modelos_usados"]) + " modelo(s) en total")
+        t = registro.actualizar(tipo, mods)
+        print("Tipo '" + tipo + "' actualizado: " + str(t.modelos_usados) + " modelo(s) en total")
     elif cmd == "tipos":
         if len(args) > 0:
             print("Error: argumento no reconocido: " + args[0])
             sys.exit(2)
-        if os.path.exists(ARCHIVO_ESQUEMAS):
-            try:
-                f = open(ARCHIVO_ESQUEMAS, encoding="utf-8-sig")
-                d = json.load(f)
-                f.close()
-                for n in d["tipos"]:
-                    d["tipos"][n]["esquema"] = esquema_desde_dict(d["tipos"][n]["esquema"])
-            except Exception as ex:
-                print("Error: no se puede leer esquemas.json: " + str(ex))
-                sys.exit(2)
-        else:
-            d = {"tipos": {}}
-        if len(d["tipos"]) == 0:
+        d = registro.tipos()
+        if len(d) == 0:
             print("No hay tipos registrados")
         else:
             print("TIPO".ljust(20) + "PATRÓN".ljust(22) + "MODELOS".rjust(7) + "  REGISTRADO")
-            for n in d["tipos"]:
-                tmp = d["tipos"][n]
-                print(n.ljust(20) + tmp["patron"].ljust(22) + str(tmp["modelos_usados"]).rjust(7) + "  " + tmp["registrado"])
+            for n in d:
+                print(n.ljust(20) + d[n].patron.ljust(22) + str(d[n].modelos_usados).rjust(7) + "  " + d[n].registrado)
     elif cmd == "mostrar":
         tipo = None
         i = 0
@@ -205,27 +123,13 @@ def main():
         if tipo is None:
             print("Error: falta --tipo")
             sys.exit(2)
-        if os.path.exists(ARCHIVO_ESQUEMAS):
-            try:
-                f = open(ARCHIVO_ESQUEMAS, encoding="utf-8-sig")
-                d = json.load(f)
-                f.close()
-                for n in d["tipos"]:
-                    d["tipos"][n]["esquema"] = esquema_desde_dict(d["tipos"][n]["esquema"])
-            except Exception as ex:
-                print("Error: no se puede leer esquemas.json: " + str(ex))
-                sys.exit(2)
-        else:
-            d = {"tipos": {}}
-        if tipo not in d["tipos"]:
-            print("Error: el tipo '" + tipo + "' no existe")
-            sys.exit(2)
+        t = registro.obtener(tipo)
         print("Tipo: " + tipo)
-        print("Patrón: " + d["tipos"][tipo]["patron"])
-        print("Modelos usados: " + str(d["tipos"][tipo]["modelos_usados"]))
-        print("Registrado: " + d["tipos"][tipo]["registrado"])
+        print("Patrón: " + t.patron)
+        print("Modelos usados: " + str(t.modelos_usados))
+        print("Registrado: " + t.registrado)
         print("Esquema:")
-        imprimir(d["tipos"][tipo]["esquema"], "$", 0)
+        imprimir(t.esquema, "$", 0)
     elif cmd == "eliminar":
         tipo = None
         i = 0
@@ -239,29 +143,7 @@ def main():
         if tipo is None:
             print("Error: falta --tipo")
             sys.exit(2)
-        if os.path.exists(ARCHIVO_ESQUEMAS):
-            try:
-                f = open(ARCHIVO_ESQUEMAS, encoding="utf-8-sig")
-                d = json.load(f)
-                f.close()
-                for n in d["tipos"]:
-                    d["tipos"][n]["esquema"] = esquema_desde_dict(d["tipos"][n]["esquema"])
-            except Exception as ex:
-                print("Error: no se puede leer esquemas.json: " + str(ex))
-                sys.exit(2)
-        else:
-            d = {"tipos": {}}
-        if tipo not in d["tipos"]:
-            print("Error: el tipo '" + tipo + "' no existe")
-            sys.exit(2)
-        del d["tipos"][tipo]
-        f = open(ARCHIVO_ESQUEMAS, "w", encoding="utf-8")
-        tmp = {"tipos": {}}
-        for n in d["tipos"]:
-            tmp["tipos"][n] = dict(d["tipos"][n])
-            tmp["tipos"][n]["esquema"] = esquema_a_dict(d["tipos"][n]["esquema"])
-        json.dump(tmp, f, indent=2, ensure_ascii=False)
-        f.close()
+        registro.eliminar(tipo)
         print("Tipo '" + tipo + "' eliminado")
     elif cmd == "validar":
         ruta = None
@@ -305,18 +187,7 @@ def main():
             print("Error: no existe " + ruta)
             sys.exit(2)
         t0 = time.perf_counter()
-        if os.path.exists(ARCHIVO_ESQUEMAS):
-            try:
-                f = open(ARCHIVO_ESQUEMAS, encoding="utf-8-sig")
-                d = json.load(f)
-                f.close()
-                for n in d["tipos"]:
-                    d["tipos"][n]["esquema"] = esquema_desde_dict(d["tipos"][n]["esquema"])
-            except Exception as ex:
-                print("Error: no se puede leer esquemas.json: " + str(ex))
-                sys.exit(2)
-        else:
-            d = {"tipos": {}}
+        d = registro.tipos()
         if os.path.isdir(ruta):
             arch = []
             for n in sorted(os.listdir(ruta)):
@@ -340,43 +211,29 @@ def main():
         cerr = 0
         stip = 0
         por_tipo = {}
-        for n in d["tipos"]:
+        for n in d:
             por_tipo[n] = 0
         cats = {}
         rutas = {}
         for p in arch:
             nom = os.path.basename(p)
             incidencias = []
-            cands = []
-            for n in d["tipos"]:
-                if fnmatch.fnmatchcase(nom, d["tipos"][n]["patron"]):
-                    cands.append(n)
+            clasif = clasificar_archivo(nom, d)
             tipo = ""
-            if len(cands) == 0:
+            if clasif.tipo is None:
                 incidencias.append(Incidencia.sin_tipo())
             else:
-                tipo = cands[0]
-                if len(cands) > 1:
-                    best = -1
-                    for c in cands:
-                        lit = 0
-                        for ch in d["tipos"][c]["patron"]:
-                            if ch != "*" and ch != "?":
-                                lit = lit + 1
-                        if lit > best:
-                            best = lit
-                            tipo = c
-                    incidencias.append(Incidencia.varios_tipos(tipo, cands))
+                tipo = clasif.tipo.nombre
+                if clasif.ambigua:
+                    incidencias.append(Incidencia.varios_tipos(tipo, clasif.candidatos))
                 try:
-                    f = open(p, encoding="utf-8-sig")
-                    doc = json.load(f)
-                    f.close()
+                    doc = leer_json(p)
                     ok = True
                 except Exception as ex:
                     incidencias.append(Incidencia.json_invalido(str(ex)))
                     ok = False
                 if ok:
-                    incidencias = incidencias + ValidadorPropio(d["tipos"][tipo]["esquema"], est).validar(doc)
+                    incidencias = incidencias + ValidadorPropio(clasif.tipo.esquema, est).validar(doc)
             if len(incidencias) > mx:
                 aux = len(incidencias)
                 incidencias = incidencias[:mx]
@@ -416,7 +273,7 @@ def main():
         f1.close()
         f2.close()
         top = {}
-        for t in d["tipos"]:
+        for t in d:
             if t in rutas:
                 tmp = sorted(rutas[t].items(), key=lambda x: (-x[1], x[0]))
                 top[t] = []

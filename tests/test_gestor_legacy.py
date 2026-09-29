@@ -18,6 +18,7 @@ from types import SimpleNamespace
 import pytest
 
 import gestor
+import gestor_json.registro
 
 DATOS = Path(__file__).parent / "datos"
 MODELOS = DATOS / "modelos"
@@ -30,7 +31,7 @@ FECHA_ISO = "2026-09-29T10:00:00"
 
 
 class FechaFija:
-    """Sustituye a ``datetime`` en ``gestor`` para que ``registrado`` sea siempre el mismo."""
+    """Sustituye a ``datetime`` en el registro de tipos para que ``registrado`` sea siempre el mismo."""
 
     ahora = FECHA
 
@@ -48,7 +49,7 @@ def cli(tmp_path, monkeypatch, capsys):
     """
     monkeypatch.chdir(tmp_path)
     FechaFija.ahora = FECHA
-    monkeypatch.setattr(gestor, "datetime", FechaFija)
+    monkeypatch.setattr(gestor_json.registro, "datetime", FechaFija)
     monkeypatch.setattr(gestor, "time", SimpleNamespace(perf_counter=lambda: 0.0))
 
     def ejecutar(*args):

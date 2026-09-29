@@ -9,6 +9,10 @@ from gestor_json.rutas import RUTA_RAIZ
 from gestor_json.tipos_logicos import TipoLogico
 
 
+class ErrorGestor(Exception):
+    """Error esperado de un comando (tipo inexistente, archivo ilegible…); su texto se muestra tal cual."""
+
+
 @dataclass
 class NodoEsquema:
     """Esquema de un valor: tipos admitidos, si admite ``null`` y la estructura interna.

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
+import json
+from pathlib import Path
+from typing import Any, Protocol
 
-from gestor_json.modelos import CampoEsquema, NodoEsquema
+from gestor_json.config import ARCHIVO_ESQUEMAS
+from gestor_json.modelos import CampoEsquema, ErrorGestor, NodoEsquema, TipoRegistrado
 from gestor_json.tipos_logicos import TipoLogico
 
 # Códigos de tipo del formato propio. Solo este módulo los conoce.
@@ -47,3 +50,53 @@ def esquema_desde_dict(datos: dict[str, Any]) -> NodoEsquema:
     }
     item = esquema_desde_dict(datos["item"]) if "item" in datos else None
     return NodoEsquema(tuple(_TIPO_DE_CODIGO[c] for c in codigos), datos["nulo"], campos, item)
+
+
+def leer_json(ruta: str | Path) -> Any:
+    """Lee un archivo JSON en UTF-8, con o sin BOM."""
+    with open(ruta, encoding="utf-8-sig") as archivo:
+        return json.load(archivo)
+
+
+class AlmacenEsquemas(Protocol):
+    """Guarda y recupera los tipos registrados. Aísla al resto del programa del formato."""
+
+    def cargar(self) -> dict[str, TipoRegistrado]:
+        """Tipos registrados, en orden de registro (vacío si todavía no hay ninguno)."""
+        ...
+
+    def guardar(self, tipos: dict[str, TipoRegistrado]) -> None:
+        ...
+
+
+class AlmacenEsquemasPropio:
+    """Todos los tipos en un único ``esquemas.json`` con el formato propio."""
+
+    def __init__(self, ruta: str | Path = ARCHIVO_ESQUEMAS) -> None:
+        self._ruta = Path(ruta)
+
+    def cargar(self) -> dict[str, TipoRegistrado]:
+        if not self._ruta.exists():
+            return {}
+        try:
+            datos = leer_json(self._ruta)
+        except Exception as error:  # noqa: BLE001 - cualquier fallo de lectura se informa igual
+            raise ErrorGestor(f"no se puede leer {self._ruta}: {error}") from error
+        return {
+            nombre: TipoRegistrado(nombre, tipo["patron"], tipo["modelos_usados"],
+                                   tipo["registrado"], esquema_desde_dict(tipo["esquema"]))
+            for nombre, tipo in datos["tipos"].items()
+        }
+
+    def guardar(self, tipos: dict[str, TipoRegistrado]) -> None:
+        datos = {"tipos": {
+            nombre: {
+                "patron": tipo.patron,
+                "modelos_usados": tipo.modelos_usados,
+                "registrado": tipo.registrado,
+                "esquema": esquema_a_dict(tipo.esquema),
+            }
+            for nombre, tipo in tipos.items()
+        }}
+        with open(self._ruta, "w", encoding="utf-8") as archivo:
+            json.dump(datos, archivo, indent=2, ensure_ascii=False)

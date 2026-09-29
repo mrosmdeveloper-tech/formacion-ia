@@ -21,9 +21,67 @@ def inferir(v):
     if type(v) == list:
         r = {"t": "list", "nulo": False, "item": {"t": "unk", "nulo": False}}
         if len(v) > 0:
-            r["item"] = inferir(v[0])
+            tmp = inferir(v[0])
+            for i in range(1, len(v)):
+                tmp = fusionar(tmp, inferir(v[i]))
+            r["item"] = tmp
         return r
     return {"t": "unk", "nulo": False}
+
+
+def fusionar(a, b):
+    if type(a["t"]) == list:
+        ta = a["t"]
+    else:
+        ta = [a["t"]]
+    if type(b["t"]) == list:
+        tb = b["t"]
+    else:
+        tb = [b["t"]]
+    tt = []
+    for x in ta:
+        if x not in tt:
+            tt.append(x)
+    for x in tb:
+        if x not in tt:
+            tt.append(x)
+    if "unk" in tt and len(tt) > 1:
+        tt.remove("unk")
+    tt.sort()
+    r = {"t": None, "nulo": a["nulo"] or b["nulo"]}
+    if len(tt) == 1:
+        r["t"] = tt[0]
+    else:
+        r["t"] = tt
+    if "obj" in tt:
+        if "obj" in ta and "obj" in tb:
+            aux = {}
+            for k in a["campos"]:
+                if k in b["campos"]:
+                    aux[k] = {
+                        "req": a["campos"][k]["req"] and b["campos"][k]["req"],
+                        "esq": fusionar(a["campos"][k]["esq"], b["campos"][k]["esq"]),
+                    }
+                else:
+                    aux[k] = {"req": False, "esq": a["campos"][k]["esq"]}
+            for k in b["campos"]:
+                if k not in a["campos"]:
+                    aux[k] = {"req": False, "esq": b["campos"][k]["esq"]}
+            r["campos"] = aux
+        else:
+            if "obj" in ta:
+                r["campos"] = a["campos"]
+            else:
+                r["campos"] = b["campos"]
+    if "list" in tt:
+        if "list" in ta and "list" in tb:
+            r["item"] = fusionar(a["item"], b["item"])
+        else:
+            if "list" in ta:
+                r["item"] = a["item"]
+            else:
+                r["item"] = b["item"]
+    return r
 
 
 def main():
@@ -57,8 +115,8 @@ def main():
         if pat is None or pat.strip() == "":
             print("Error: el patrón no puede estar vacío")
             sys.exit(2)
-        if len(mods) != 1:
-            print("Error: hay que indicar un --modelo")
+        if len(mods) == 0:
+            print("Error: hay que indicar al menos un --modelo")
             sys.exit(2)
         if os.path.exists("esquemas.json"):
             try:
@@ -73,14 +131,19 @@ def main():
         if tipo in d["tipos"]:
             print("Error: el tipo '" + tipo + "' ya existe")
             sys.exit(2)
-        try:
-            f = open(mods[0], encoding="utf-8-sig")
-            v = json.load(f)
-            f.close()
-        except Exception as ex:
-            print("Error: no se puede leer el modelo " + mods[0] + ": " + str(ex))
-            sys.exit(2)
-        e = inferir(v)
+        e = None
+        for m in mods:
+            try:
+                f = open(m, encoding="utf-8-sig")
+                v = json.load(f)
+                f.close()
+            except Exception as ex:
+                print("Error: no se puede leer el modelo " + m + ": " + str(ex))
+                sys.exit(2)
+            if e is None:
+                e = inferir(v)
+            else:
+                e = fusionar(e, inferir(v))
         d["tipos"][tipo] = {
             "patron": pat,
             "modelos_usados": len(mods),

@@ -54,6 +54,8 @@ def _fusionar_campos(a: NodoEsquema, b: NodoEsquema) -> dict[str, CampoEsquema]:
 
 
 def _fusionar_items(a: NodoEsquema, b: NodoEsquema) -> NodoEsquema:
-    if a.item is not None and b.item is not None:
-        return fusionar(a.item, b.item)
-    return copy.deepcopy(a.item if a.item is not None else b.item)
+    a_es_lista = TipoLogico.LISTA in a.tipos
+    b_es_lista = TipoLogico.LISTA in b.tipos
+    if a_es_lista and b_es_lista:
+        return fusionar(a.elementos, b.elementos)
+    return copy.deepcopy(a.elementos if a_es_lista else b.elementos)

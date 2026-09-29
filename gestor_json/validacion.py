@@ -26,6 +26,7 @@ class ValidadorPropio:
         self._estricto = estricto
 
     def validar(self, documento: Any) -> list[Incidencia]:
+        """Valida el documento completo desde la raíz (``$``)."""
         incidencias: list[Incidencia] = []
         self._validar_valor(documento, self._esquema, RUTA_RAIZ, incidencias)
         return sorted(incidencias, key=lambda incidencia: clave_orden(incidencia.ruta))
@@ -44,7 +45,7 @@ class ValidadorPropio:
             self._validar_objeto(valor, esquema, ruta, incidencias)
         elif tipo is TipoLogico.LISTA:
             for posicion, elemento in enumerate(valor):
-                self._validar_valor(elemento, esquema.item, ruta_elemento(ruta, posicion),
+                self._validar_valor(elemento, esquema.elementos, ruta_elemento(ruta, posicion),
                                     incidencias)
 
     def _validar_objeto(self, objeto: dict[str, Any], esquema: NodoEsquema, ruta: str,
@@ -68,4 +69,5 @@ FabricaValidador = Callable[[TipoRegistrado, bool], Validador]
 
 
 def crear_validador_propio(tipo: TipoRegistrado, estricto: bool) -> Validador:
+    """Fábrica de validadores del formato propio (la que se usa por defecto)."""
     return ValidadorPropio(tipo.esquema, estricto)

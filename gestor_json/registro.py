@@ -24,6 +24,7 @@ class Clasificacion:
 
     @property
     def ambigua(self) -> bool:
+        """Si el nombre encaja con más de un patrón."""
         return len(self.candidatos) > 1
 
 
@@ -70,6 +71,7 @@ class RegistroTipos:
         return self._almacen.cargar()
 
     def obtener(self, nombre: str) -> TipoRegistrado:
+        """Devuelve el tipo o lanza :class:`ErrorGestor` si no existe."""
         return self._existente(self.tipos(), nombre)
 
     def registrar(self, nombre: str, patron: str, rutas_modelos: list[str]) -> TipoRegistrado:
@@ -94,6 +96,7 @@ class RegistroTipos:
         return tipo
 
     def eliminar(self, nombre: str) -> None:
+        """Borra el tipo o lanza :class:`ErrorGestor` si no existe."""
         tipos = self.tipos()
         self._existente(tipos, nombre)
         del tipos[nombre]

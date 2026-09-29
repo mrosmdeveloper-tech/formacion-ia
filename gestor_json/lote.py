@@ -83,6 +83,7 @@ class ResumenLote:
         return cls(por_tipo=dict.fromkeys(tipos, 0))
 
     def agregar(self, resultado: ResultadoArchivo) -> None:
+        """Suma el resultado de un archivo a las estadísticas."""
         self.archivos_totales += 1
         for incidencia in resultado.incidencias:
             self.incidencias_por_categoria[incidencia.categoria] += 1
@@ -100,9 +101,11 @@ class ResumenLote:
 
     @property
     def total_incidencias(self) -> int:
+        """Incidencias de todos los archivos (las escritas en ``incidencias.csv``)."""
         return sum(self.incidencias_por_categoria.values())
 
     def categorias_ordenadas(self) -> dict[str, int]:
+        """Incidencias por categoría, en orden alfabético."""
         return dict(sorted(self.incidencias_por_categoria.items()))
 
     def rutas_mas_frecuentes(self) -> dict[str, list[tuple[str, int]]]:

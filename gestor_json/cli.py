@@ -37,6 +37,7 @@ class _ParserSinMensajes(argparse.ArgumentParser):
     """``ArgumentParser`` que lanza :class:`ErrorGestor` en lugar de imprimir y salir."""
 
     def error(self, message: str) -> NoReturn:
+        """Traduce "falta el valor de una opción" al mensaje original y lanza el error."""
         falta_valor = _FALTA_VALOR.match(message)
         if falta_valor:
             raise ErrorGestor(f"argumento no reconocido: {falta_valor.group(1)}")
@@ -44,24 +45,27 @@ class _ParserSinMensajes(argparse.ArgumentParser):
 
 
 def _crear_parser(programa: str) -> argparse.ArgumentParser:
-    opciones = {"add_help": False, "allow_abbrev": False}
-    parser = _ParserSinMensajes(prog=programa, **opciones)
+    # Sin -h ni abreviaturas de opciones, como el programa original.
+    parser = _ParserSinMensajes(prog=programa, add_help=False, allow_abbrev=False)
     comandos = parser.add_subparsers(dest="comando")
 
-    registrar = comandos.add_parser("registrar", **opciones)
+    def subcomando(nombre: str) -> argparse.ArgumentParser:
+        return comandos.add_parser(nombre, add_help=False, allow_abbrev=False)
+
+    registrar = subcomando("registrar")
     registrar.add_argument("--tipo")
     registrar.add_argument("--patron")
     registrar.add_argument("--modelo", dest="modelos", action="append", default=[])
 
-    actualizar = comandos.add_parser("actualizar", **opciones)
+    actualizar = subcomando("actualizar")
     actualizar.add_argument("--tipo")
     actualizar.add_argument("--modelo", dest="modelos", action="append", default=[])
 
-    comandos.add_parser("tipos", **opciones)
+    subcomando("tipos")
     for nombre in ("mostrar", "eliminar"):
-        comandos.add_parser(nombre, **opciones).add_argument("--tipo")
+        subcomando(nombre).add_argument("--tipo")
 
-    validar = comandos.add_parser("validar", **opciones)
+    validar = subcomando("validar")
     validar.add_argument("ruta", nargs="?")
     validar.add_argument("--salida")
     validar.add_argument("--estricto", action="store_true")
@@ -217,4 +221,4 @@ def _imprimir_arbol(esquema: NodoEsquema, etiqueta: str, nivel: int) -> None:
             etiqueta_campo = clave if campo.obligatorio else f"{clave} (opcional)"
             _imprimir_arbol(campo.esquema, etiqueta_campo, nivel + 1)
     if TipoLogico.LISTA in esquema.tipos:
-        _imprimir_arbol(esquema.item, "[]", nivel + 1)
+        _imprimir_arbol(esquema.elementos, "[]", nivel + 1)

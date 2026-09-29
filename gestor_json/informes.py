@@ -47,15 +47,19 @@ class EscritorInformes:
         self._resumen.close()
 
     def escribir(self, resultado: ResultadoArchivo) -> None:
-        for i in resultado.incidencias:
-            self._csv_incidencias.writerow([resultado.archivo, resultado.tipo, i.nivel, i.categoria,
-                                            i.ruta, i.esperado, i.encontrado, i.mensaje])
+        """Añade las incidencias del archivo y su fila de resumen."""
+        for incidencia in resultado.incidencias:
+            self._csv_incidencias.writerow([
+                resultado.archivo, resultado.tipo, incidencia.nivel, incidencia.categoria,
+                incidencia.ruta, incidencia.esperado, incidencia.encontrado, incidencia.mensaje,
+            ])
         self._csv_resumen.writerow([resultado.archivo, resultado.tipo,
                                     "si" if resultado.valido else "no",
                                     resultado.errores, resultado.avisos])
 
 
 def escribir_resumen_lote(carpeta: str, resumen: ResumenLote, segundos: float) -> None:
+    """Escribe ``resumen_lote.json`` con los totales, las categorías y las rutas más frecuentes."""
     datos = {
         "archivos_totales": resumen.archivos_totales,
         "por_tipo": resumen.por_tipo,
@@ -74,6 +78,7 @@ def escribir_resumen_lote(carpeta: str, resumen: ResumenLote, segundos: float) -
 
 
 def imprimir_resumen(carpeta: str, resumen: ResumenLote, segundos: float) -> None:
+    """Muestra por consola el resumen del lote y el tiempo total."""
     print(f"Archivos procesados: {resumen.archivos_totales}")
     for tipo, total in resumen.por_tipo.items():
         print(f"  {tipo}: {total}")

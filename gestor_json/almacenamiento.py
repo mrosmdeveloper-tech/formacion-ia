@@ -37,7 +37,7 @@ def esquema_a_dict(nodo: NodoEsquema) -> dict[str, Any]:
             for clave, campo in nodo.campos.items()
         }
     if TipoLogico.LISTA in nodo.tipos:
-        datos["item"] = esquema_a_dict(nodo.item)
+        datos["item"] = esquema_a_dict(nodo.elementos)
     return datos
 
 
@@ -66,6 +66,7 @@ class AlmacenEsquemas(Protocol):
         ...
 
     def guardar(self, tipos: dict[str, TipoRegistrado]) -> None:
+        """Sustituye todos los tipos guardados por ``tipos``."""
         ...
 
 
@@ -76,6 +77,7 @@ class AlmacenEsquemasPropio:
         self._ruta = Path(ruta)
 
     def cargar(self) -> dict[str, TipoRegistrado]:
+        """Lee ``esquemas.json``; si no existe, no hay tipos registrados."""
         if not self._ruta.exists():
             return {}
         try:
@@ -89,6 +91,7 @@ class AlmacenEsquemasPropio:
         }
 
     def guardar(self, tipos: dict[str, TipoRegistrado]) -> None:
+        """Escribe ``esquemas.json`` con sangría de 2 y en UTF-8 sin escapar."""
         datos = {"tipos": {
             nombre: {
                 "patron": tipo.patron,

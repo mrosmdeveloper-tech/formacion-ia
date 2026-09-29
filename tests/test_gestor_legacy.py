@@ -8,6 +8,7 @@ Cada test se ejecuta en una carpeta temporal (nunca toca el ``esquemas.json`` re
 de registro y el cronómetro fijados para que los resultados sean deterministas.
 """
 
+import csv
 import json
 import sys
 from datetime import datetime
@@ -64,6 +65,11 @@ def cli(tmp_path, monkeypatch, capsys):
 
 def leer_esquemas():
     return json.loads(Path("esquemas.json").read_text(encoding="utf-8"))
+
+
+def leer_csv(ruta):
+    with open(ruta, encoding="utf-8", newline="") as archivo:
+        return list(csv.reader(archivo))
 
 
 def registrar(cli, tipo, patron, *modelos):
@@ -387,3 +393,83 @@ def test_esquemas_json_corrupto(cli, args):
     assert codigo == 2
     assert salida == ("Error: no se puede leer esquemas.json: Expecting property name enclosed "
                       "in double quotes: line 1 column 2 (char 1)\n")
+
+
+# --------------------------------------------------------------------------- clasificación
+
+CABECERA_INCIDENCIAS = ["archivo", "tipo", "nivel", "categoria", "ruta", "esperado", "encontrado",
+                        "mensaje"]
+CABECERA_RESUMEN = ["archivo", "tipo", "valido", "errores", "avisos"]
+SIN_TIPO = "El nombre del archivo no encaja con ningún patrón registrado"
+
+
+@pytest.fixture
+def tipos_de_clasificacion(cli):
+    """Tres tipos cuyos patrones se solapan: ``pedido_1.json`` empata y el borrador es más específico."""
+    registrar(cli, "pedido", "pedido_*.json", VACIO)
+    registrar(cli, "borrador", "*_borrador.json", VACIO)
+    registrar(cli, "corto", "pedido_?.json", VACIO)
+
+
+def test_clasificacion_por_patron(cli, tipos_de_clasificacion):
+    codigo, _ = cli("validar", CLASIFICACION, "--salida", "salida")
+
+    assert codigo == 0
+    assert leer_csv("salida/incidencias.csv") == [
+        CABECERA_INCIDENCIAS,
+        ["informe_1.json", "", "aviso", "sin_tipo", "", "", "", SIN_TIPO],
+        ["pedido_1.json", "pedido", "aviso", "varios_tipos", "", "pedido", "pedido, corto",
+         "El nombre encaja con varios patrones (pedido, corto); se usa 'pedido'"],
+        ["pedido_7_borrador.json", "borrador", "aviso", "varios_tipos", "", "borrador",
+         "pedido, borrador",
+         "El nombre encaja con varios patrones (pedido, borrador); se usa 'borrador'"],
+    ]
+    assert leer_csv("salida/resumen_archivos.csv") == [
+        CABECERA_RESUMEN,
+        ["informe_1.json", "", "no", "0", "1"],
+        ["pedido_1.json", "pedido", "si", "0", "1"],
+        ["pedido_12.json", "pedido", "si", "0", "0"],
+        ["pedido_7_borrador.json", "borrador", "si", "0", "1"],
+    ]
+
+
+def test_formato_exacto_de_los_csv(cli, tipos_de_clasificacion):
+    cli("validar", CLASIFICACION / "pedido_7_borrador.json", "--salida", "salida")
+
+    assert Path("salida/incidencias.csv").read_bytes() == (
+        "archivo,tipo,nivel,categoria,ruta,esperado,encontrado,mensaje\r\n"
+        'pedido_7_borrador.json,borrador,aviso,varios_tipos,,borrador,"pedido, borrador",'
+        "\"El nombre encaja con varios patrones (pedido, borrador); se usa 'borrador'\"\r\n"
+    ).encode("utf-8")
+    assert Path("salida/resumen_archivos.csv").read_bytes() == (
+        b"archivo,tipo,valido,errores,avisos\r\n"
+        b"pedido_7_borrador.json,borrador,si,0,1\r\n"
+    )
+
+
+def test_en_caso_de_empate_gana_el_tipo_registrado_primero(cli):
+    registrar(cli, "corto", "pedido_?.json", VACIO)
+    registrar(cli, "pedido", "pedido_*.json", VACIO)
+
+    cli("validar", CLASIFICACION / "pedido_1.json", "--salida", "salida")
+
+    assert leer_csv("salida/resumen_archivos.csv")[1] == ["pedido_1.json", "corto", "si", "0", "1"]
+    assert leer_csv("salida/incidencias.csv")[1][5:7] == ["corto", "corto, pedido"]
+
+
+def test_la_clasificacion_distingue_mayusculas(cli):
+    registrar(cli, "pedido", "PEDIDO_*.json", VACIO)
+
+    cli("validar", CLASIFICACION / "pedido_12.json", "--salida", "salida")
+
+    assert leer_csv("salida/resumen_archivos.csv")[1] == ["pedido_12.json", "", "no", "0", "1"]
+
+
+def test_sin_esquemas_todos_los_archivos_quedan_sin_tipo(cli):
+    codigo, _ = cli("validar", CLASIFICACION, "--salida", "salida")
+
+    assert codigo == 0
+    assert [fila[3] for fila in leer_csv("salida/incidencias.csv")[1:]] == ["sin_tipo"] * 4
+    resumen = json.loads(Path("salida/resumen_lote.json").read_text(encoding="utf-8"))
+    assert resumen["sin_tipo"] == 4
+    assert resumen["por_tipo"] == {}

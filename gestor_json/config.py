@@ -1,7 +1,18 @@
 """Constantes del programa: archivos, límites, niveles y categorías de incidencia."""
 
 ARCHIVO_ESQUEMAS = "esquemas.json"
-"""Archivo donde se guardan los tipos registrados (en la carpeta de trabajo)."""
+"""Archivo donde se guardan los tipos registrados en el formato propio (en la carpeta de trabajo)."""
+
+CARPETA_ESQUEMAS = "esquemas"
+"""Carpeta donde se guardan los tipos registrados en JSON Schema (en la carpeta de trabajo)."""
+
+ARCHIVO_REGISTRO = "registro.json"
+"""Índice de los tipos registrados en JSON Schema, dentro de ``CARPETA_ESQUEMAS``."""
+
+EXTENSION_ESQUEMA = ".schema.json"
+
+CONFIGURACION_VSCODE = ".vscode/settings.json"
+"""Configuración del proyecto en VS Code donde ``exportar-vscode`` asocia patrones y esquemas."""
 
 MAX_INCIDENCIAS_POR_DEFECTO = 200
 """Incidencias que se guardan como máximo por archivo si no se indica otro límite."""
@@ -34,3 +45,5 @@ class Categoria:
     VARIOS_TIPOS = "varios_tipos"
     SIN_TIPO = "sin_tipo"
     INCIDENCIAS_TRUNCADAS = "incidencias_truncadas"
+    REGLA_INCUMPLIDA = "regla_incumplida"
+    """Una regla de JSON Schema distinta de tipo, obligatorio o campo extra (minimum, pattern…)."""

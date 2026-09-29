@@ -629,6 +629,9 @@ def generar_lote(
     carpeta_entrada.mkdir(parents=True, exist_ok=True)
 
     estadisticas = Estadisticas(por_tipo=Counter(), por_error=Counter())
+    # Se usa random (no secrets) a propósito: el azar solo decide qué datos inventados se generan,
+    # no protege nada, y el lote tiene que ser reproducible con la misma semilla, algo que un
+    # generador criptográfico no permite. Por eso la regla S2245 de SonarQube no aplica aquí.
     rng_modelos = random.Random(semilla)
     for tipo in TIPOS:
         for numero, modelo in enumerate(tipo.generar_modelos(rng_modelos), start=1):

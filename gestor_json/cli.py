@@ -14,23 +14,52 @@ import os
 import re
 import sys
 import time
-from typing import NoReturn
+from dataclasses import dataclass
+from typing import Callable, NoReturn
 
-from gestor_json.almacenamiento import AlmacenEsquemasPropio
-from gestor_json.config import MAX_INCIDENCIAS_POR_DEFECTO
+from gestor_json.almacenamiento import AlmacenEsquemas, AlmacenEsquemasPropio
+from gestor_json import migracion
+from gestor_json.config import (
+    ARCHIVO_ESQUEMAS,
+    CARPETA_ESQUEMAS,
+    CONFIGURACION_VSCODE,
+    MAX_INCIDENCIAS_POR_DEFECTO,
+)
 from gestor_json.informes import EscritorInformes, escribir_resumen_lote, imprimir_resumen
+from gestor_json.jsonschema_formato import (
+    AlmacenEsquemasJsonSchema,
+    crear_validador_jsonschema,
+    exportar_vscode,
+)
 from gestor_json.lote import ResumenLote, ValidadorLote, listar_archivos
 from gestor_json.modelos import ErrorGestor, NodoEsquema
 from gestor_json.registro import RegistroTipos
 from gestor_json.tipos_logicos import TipoLogico
+from gestor_json.validacion import FabricaValidador, crear_validador_propio
 
 SALIDA_CORRECTA = 0
 SALIDA_CON_ERRORES = 1
 SALIDA_FALLO = 2
 
-COMANDOS = ("registrar", "actualizar", "tipos", "mostrar", "eliminar", "validar")
+COMANDOS = ("registrar", "actualizar", "tipos", "mostrar", "eliminar", "validar",
+            "migrar-esquemas", "exportar-vscode")
 
 _FALTA_VALOR = re.compile(r"argument (\S+): expected one argument")
+
+
+@dataclass(frozen=True)
+class Formato:
+    """Formato de esquema: dónde se guardan los tipos y con qué se validan."""
+
+    crear_almacen: Callable[[], AlmacenEsquemas]
+    crear_validador: FabricaValidador
+
+
+FORMATOS = {
+    "jsonschema": Formato(AlmacenEsquemasJsonSchema, crear_validador_jsonschema),
+    "propio": Formato(AlmacenEsquemasPropio, crear_validador_propio),
+}
+FORMATO_POR_DEFECTO = "jsonschema"
 
 
 class _ParserSinMensajes(argparse.ArgumentParser):
@@ -49,8 +78,11 @@ def _crear_parser(programa: str) -> argparse.ArgumentParser:
     parser = _ParserSinMensajes(prog=programa, add_help=False, allow_abbrev=False)
     comandos = parser.add_subparsers(dest="comando")
 
-    def subcomando(nombre: str) -> argparse.ArgumentParser:
-        return comandos.add_parser(nombre, add_help=False, allow_abbrev=False)
+    def subcomando(nombre: str, con_formato: bool = True) -> argparse.ArgumentParser:
+        parser_comando = comandos.add_parser(nombre, add_help=False, allow_abbrev=False)
+        parser_comando.add_argument("--formato", default=FORMATO_POR_DEFECTO if con_formato else
+                                    argparse.SUPPRESS)
+        return parser_comando
 
     registrar = subcomando("registrar")
     registrar.add_argument("--tipo")
@@ -71,6 +103,15 @@ def _crear_parser(programa: str) -> argparse.ArgumentParser:
     validar.add_argument("--estricto", action="store_true")
     # Se lee como texto para dar el mensaje de error propio si no es un entero.
     validar.add_argument("--max-incidencias", default=str(MAX_INCIDENCIAS_POR_DEFECTO))
+
+    migrar = subcomando("migrar-esquemas", con_formato=False)
+    migrar.add_argument("--desde", default=ARCHIVO_ESQUEMAS)
+    migrar.add_argument("--hacia", default=CARPETA_ESQUEMAS)
+    migrar.add_argument("--verificar")
+
+    vscode = subcomando("exportar-vscode", con_formato=False)
+    vscode.add_argument("--esquemas", default=CARPETA_ESQUEMAS)
+    vscode.add_argument("--salida", default=CONFIGURACION_VSCODE)
     return parser
 
 
@@ -88,7 +129,11 @@ def main(argv: list[str] | None = None) -> int:
         argumentos, sobrantes = _crear_parser(programa).parse_known_args(argv)
         if sobrantes:
             raise ErrorGestor(f"argumento no reconocido: {sobrantes[0]}")
-        registro = RegistroTipos(AlmacenEsquemasPropio())
+        if argumentos.comando == "migrar-esquemas":
+            return _migrar_esquemas(argumentos)
+        if argumentos.comando == "exportar-vscode":
+            return _exportar_vscode(argumentos)
+        registro = RegistroTipos(_formato(argumentos).crear_almacen())
         return _EJECUTORES[argumentos.comando](argumentos, registro)
     except ErrorGestor as error:
         print(f"Error: {error}")
@@ -167,7 +212,8 @@ def _validar(argumentos: argparse.Namespace, registro: RegistroTipos) -> int:
     except Exception as error:  # noqa: BLE001 - cualquier fallo al crear los informes
         raise ErrorGestor(
             f"no se pueden crear los informes en {argumentos.salida}: {error}") from error
-    validador = ValidadorLote(tipos, argumentos.estricto, max_incidencias)
+    validador = ValidadorLote(tipos, argumentos.estricto, max_incidencias,
+                              _formato(argumentos).crear_validador)
     resumen = ResumenLote.para(tipos)
     with informes:
         for archivo in archivos:
@@ -181,6 +227,32 @@ def _validar(argumentos: argparse.Namespace, registro: RegistroTipos) -> int:
     return SALIDA_CON_ERRORES if resumen.con_errores else SALIDA_CORRECTA
 
 
+def _migrar_esquemas(argumentos: argparse.Namespace) -> int:
+    tipos = migracion.migrar(argumentos.desde, argumentos.hacia)
+    print(f"Migrados {len(tipos)} tipo(s) de {argumentos.desde} a {argumentos.hacia}: "
+          f"{', '.join(tipos)}")
+    if argumentos.verificar is None:
+        print("Sin verificación: usa --verificar <archivo_o_carpeta> para comparar las "
+              "incidencias con los dos formatos")
+        return SALIDA_CORRECTA
+    verificacion = migracion.verificar(argumentos.desde, argumentos.hacia, argumentos.verificar)
+    if verificacion.correcta:
+        print(f"Verificación con {argumentos.verificar}: {verificacion.archivos} archivo(s), "
+              "mismas incidencias con los dos formatos")
+        return SALIDA_CORRECTA
+    print(f"Verificación con {argumentos.verificar}: {len(verificacion.distintos)} de "
+          f"{verificacion.archivos} archivo(s) con incidencias distintas: "
+          f"{', '.join(verificacion.distintos)}")
+    return SALIDA_CON_ERRORES
+
+
+def _exportar_vscode(argumentos: argparse.Namespace) -> int:
+    total = exportar_vscode(argumentos.esquemas, argumentos.salida)
+    print(f"{total} esquema(s) asociados en {argumentos.salida}: VS Code validará los JSON que "
+          "encajen con cada patrón mientras se editan")
+    return SALIDA_CORRECTA
+
+
 _EJECUTORES = {
     "registrar": _registrar,
     "actualizar": _actualizar,
@@ -192,6 +264,13 @@ _EJECUTORES = {
 
 
 # --------------------------------------------------------------------------- utilidades
+
+def _formato(argumentos: argparse.Namespace) -> Formato:
+    if argumentos.formato not in FORMATOS:
+        raise ErrorGestor(f"formato desconocido: {argumentos.formato} "
+                          f"(usa {' o '.join(FORMATOS)})")
+    return FORMATOS[argumentos.formato]
+
 
 def _exigir_tipo(tipo: str | None) -> None:
     if tipo is None:

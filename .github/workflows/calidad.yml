@@ -1,0 +1,45 @@
+# Tests con cobertura y análisis de calidad en SonarQube Cloud.
+#
+# El análisis automático de SonarQube Cloud no importa la cobertura, así que el análisis se lanza
+# desde aquí: primero pytest genera coverage.xml y después el scanner lo envía junto con el código.
+# Requiere el secreto SONAR_TOKEN en el repositorio (Settings > Secrets and variables > Actions)
+# y tener desactivado el análisis automático en SonarQube Cloud.
+
+name: Calidad
+
+# El plan Free de SonarQube Cloud analiza la rama principal y los pull requests (no otras
+# ramas): las ramas de trabajo se analizan a través de su PR.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  tests-y-sonarqube:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Historial completo: SonarQube Cloud lo usa para detectar el código nuevo.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements-dev.txt
+
+      - name: Tests con cobertura
+        run: python -m pytest --cov=gestor_json --cov-report=term --cov-report=xml
+
+      - name: Análisis en SonarQube Cloud
+        uses: SonarSource/sonarqube-scan-action@v8
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

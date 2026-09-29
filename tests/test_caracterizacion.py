@@ -21,6 +21,7 @@ import pytest
 
 import gestor_json.cli
 import gestor_json.registro
+from conftest import contenido_comparable
 
 DATOS = Path(__file__).parent / "datos"
 MODELOS = DATOS / "modelos"
@@ -49,6 +50,9 @@ def cli(tmp_path, monkeypatch, capsys):
     FechaFija.ahora = FECHA
     monkeypatch.setattr(gestor_json.registro, "datetime", FechaFija)
     monkeypatch.setattr(gestor_json.cli, "time", SimpleNamespace(perf_counter=lambda: 0.0))
+    # Estos tests fijan el comportamiento del formato propio (esquemas.json), el del programa
+    # original; JSON Schema tiene sus propios tests de equivalencia.
+    monkeypatch.setattr(gestor_json.cli, "FORMATO_POR_DEFECTO", "propio")
 
     def ejecutar(*args):
         argv = [str(a) for a in args]
@@ -312,7 +316,8 @@ MENSAJE_JSON_INVALIDO = "Expecting property name enclosed in double quotes: line
 ERRORES_DE_COMANDOS = {
     "sin comando": (
         [], "Uso: python main.py <comando> [opciones]\n"
-            "Comandos: registrar, actualizar, tipos, mostrar, eliminar, validar\n"),
+            "Comandos: registrar, actualizar, tipos, mostrar, eliminar, validar, "
+            "migrar-esquemas, exportar-vscode\n"),
     "comando desconocido": (["borrar"], "Error: comando desconocido: borrar\n"),
     "registrar tipo existente": (
         ["registrar", "--tipo", "base", "--patron", "x_*.json", "--modelo", VACIO],
@@ -686,7 +691,8 @@ def test_lote_de_ejemplo_identico_a_la_referencia(cli):
     """Caracterización global: registra los tres tipos de ``datos/ejemplos`` y valida su entrada.
 
     ``esquemas.json`` y los tres informes deben coincidir byte a byte con los de
-    ``tests/datos/esperado/ejemplos``, generados con la versión legacy y revisados a mano.
+    ``tests/datos/esperado/ejemplos``, generados con la versión legacy y revisados a mano (salvo el
+    salto de línea de los JSON, que depende del sistema).
     """
     ejemplos = Path(__file__).parent.parent / "datos" / "ejemplos"
     for tipo, patron, prefijo in [("pedido", "pedido_*.json", "pedido"),
@@ -699,9 +705,11 @@ def test_lote_de_ejemplo_identico_a_la_referencia(cli):
 
     assert codigo == 1
     esperado = DATOS / "esperado" / "ejemplos"
-    assert Path("esquemas.json").read_bytes() == (esperado / "esquemas.json").read_bytes()
+    assert contenido_comparable("esquemas.json") == contenido_comparable(
+        esperado / "esquemas.json")
     for informe in ("incidencias.csv", "resumen_archivos.csv", "resumen_lote.json"):
-        assert (Path("salida") / informe).read_bytes() == (esperado / informe).read_bytes(), informe
+        assert contenido_comparable(Path("salida") / informe) == contenido_comparable(
+            esperado / informe), informe
 
 
 # --------------------------------------------------------------------------- errores de validar

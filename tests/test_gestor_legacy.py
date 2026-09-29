@@ -18,6 +18,7 @@ from types import SimpleNamespace
 import pytest
 
 import gestor
+import gestor_json.cli
 import gestor_json.registro
 
 DATOS = Path(__file__).parent / "datos"
@@ -50,7 +51,7 @@ def cli(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     FechaFija.ahora = FECHA
     monkeypatch.setattr(gestor_json.registro, "datetime", FechaFija)
-    monkeypatch.setattr(gestor, "time", SimpleNamespace(perf_counter=lambda: 0.0))
+    monkeypatch.setattr(gestor_json.cli, "time", SimpleNamespace(perf_counter=lambda: 0.0))
 
     def ejecutar(*args):
         monkeypatch.setattr(sys, "argv", ["gestor.py", *[str(a) for a in args]])

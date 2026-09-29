@@ -190,6 +190,41 @@ python -m pytest --cov=gestor_json --cov-report=term-missing --cov-report=html
 - `tests/test_migracion.py`: migración, verificación y exportación a VS Code.
 - `tests/test_<módulo>.py`: tests unitarios del resto de módulos.
 
+## Calidad
+
+Cada pull request y cada push a `main` ejecutan el workflow
+[`.github/workflows/calidad.yml`](.github/workflows/calidad.yml): los tests con cobertura en Linux
+(`coverage.xml`) y el análisis en
+[SonarQube Cloud](https://sonarcloud.io/project/overview?id=mrosmdeveloper-tech_formacion-ia), que
+importa esa cobertura. El token de SonarQube está en el secreto `SONAR_TOKEN` del repositorio, no
+en ningún archivo.
+
+Resultado del análisis del PR #2 (JSON Schema), sobre `gestor_json/` (668 líneas de código):
+
+| Métrica | Resultado |
+|---|---|
+| Quality gate (Sonar way) | ✅ Passed |
+| Cobertura | 99,2 % global; 100 % del código nuevo (igual que pytest-cov) |
+| Bugs | 0 (fiabilidad A) |
+| Vulnerabilidades | 0 (seguridad A) |
+| Code smells | 0 (mantenibilidad A) |
+| Security hotspots | 0 |
+| Duplicaciones | 0 % |
+
+Revisión de los avisos de seguridad:
+
+- **Corregido:** en el formato JSON Schema, un nombre de tipo como `../fuera` escribía su esquema
+  fuera de `esquemas/`. Ahora se rechazan los nombres que no sirven como nombre de archivo, y un
+  índice editado a mano no puede apuntar a archivos fuera de la carpeta.
+- **Falsos positivos**, marcados como tales en SonarQube Cloud con su justificación:
+  - `pythonsecurity:S8707` (×2), *path traversal* en `exportar-vscode --salida`: es la ruta de
+    destino que elige el usuario, como en `validar --salida`; el programa se ejecuta con sus
+    permisos y no cruza ninguna frontera de privilegios.
+  - `python:S2245` (×2), generador pseudoaleatorio en `scripts/generar_datos.py`: el azar solo
+    decide qué datos inventados se generan y el lote tiene que ser reproducible con una semilla,
+    algo que `secrets` no permite. Además, `scripts/` queda fuera del análisis
+    (`sonar.sources=gestor_json`).
+
 ## Benchmark
 
 ```powershell

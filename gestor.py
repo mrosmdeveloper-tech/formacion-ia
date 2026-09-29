@@ -133,7 +133,7 @@ def imprimir(e, nombre, nivel):
         imprimir(e["item"], "[]", nivel + 1)
 
 
-def validar(v, e, ruta):
+def validar(v, e, ruta, est):
     global incidencias
     if type(e["t"]) == list:
         tt = e["t"]
@@ -181,7 +181,7 @@ def validar(v, e, ruta):
             else:
                 r = ruta + "[" + json.dumps(k, ensure_ascii=False) + "]"
             if k in v:
-                validar(v[k], e["campos"][k]["esq"], r)
+                validar(v[k], e["campos"][k]["esq"], r, est)
             else:
                 if e["campos"][k]["req"]:
                     incidencias.append({
@@ -210,8 +210,12 @@ def validar(v, e, ruta):
                     aux = "objeto"
                 else:
                     aux = "lista"
+                if est:
+                    tmp = "error"
+                else:
+                    tmp = "aviso"
                 incidencias.append({
-                    "nivel": "aviso",
+                    "nivel": tmp,
                     "categoria": "campo_extra",
                     "ruta": r,
                     "esperado": "ausente",
@@ -220,7 +224,7 @@ def validar(v, e, ruta):
                 })
     if tv == "list":
         for i in range(len(v)):
-            validar(v[i], e["item"], ruta + "[" + str(i) + "]")
+            validar(v[i], e["item"], ruta + "[" + str(i) + "]", est)
 
 
 def clave_orden(x):
@@ -441,9 +445,24 @@ def main():
         print("Tipo '" + tipo + "' eliminado")
     elif cmd == "validar":
         ruta = None
+        est = False
+        mx = 200
         i = 0
         while i < len(args):
-            if args[i].startswith("--"):
+            if args[i] == "--estricto":
+                est = True
+                i = i + 1
+            elif args[i] == "--max-incidencias" and i + 1 < len(args):
+                try:
+                    mx = int(args[i + 1])
+                except ValueError:
+                    print("Error: --max-incidencias debe ser un número entero")
+                    sys.exit(2)
+                if mx < 1:
+                    print("Error: --max-incidencias debe ser al menos 1")
+                    sys.exit(2)
+                i = i + 2
+            elif args[i].startswith("--"):
                 print("Error: argumento no reconocido: " + args[i])
                 sys.exit(2)
             elif ruta is None:
@@ -529,10 +548,21 @@ def main():
                     ok = False
                 if ok:
                     aux = len(incidencias)
-                    validar(doc, d["tipos"][tipo]["esquema"], "$")
+                    validar(doc, d["tipos"][tipo]["esquema"], "$", est)
                     tmp = incidencias[aux:]
                     tmp.sort(key=clave_orden)
                     incidencias = incidencias[:aux] + tmp
+            if len(incidencias) > mx:
+                aux = len(incidencias)
+                incidencias = incidencias[:mx]
+                incidencias.append({
+                    "nivel": "aviso",
+                    "categoria": "incidencias_truncadas",
+                    "ruta": "",
+                    "esperado": str(mx),
+                    "encontrado": str(aux),
+                    "mensaje": "Se han encontrado " + str(aux) + " incidencias; solo se incluyen las primeras " + str(mx),
+                })
             if tipo == "":
                 print(nom + " -> (sin tipo)")
             else:

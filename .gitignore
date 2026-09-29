@@ -12,9 +12,11 @@ htmlcov/
 
 # Datos y salidas generadas
 datos/generados/
-salida/
-esquemas.json
-esquemas/
+# Generados por el programa en la carpeta de trabajo (solo en la raíz: tests/datos/esperado
+# guarda referencias con estos mismos nombres)
+/salida/
+/esquemas.json
+/esquemas/
 # Generado por exportar-vscode a partir de los esquemas locales
 .vscode/settings.json
 

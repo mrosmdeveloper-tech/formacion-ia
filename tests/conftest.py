@@ -14,6 +14,17 @@ DATOS = Path(__file__).parent / "datos"
 EJEMPLOS = Path(__file__).parent.parent / "datos" / "ejemplos"
 
 
+def contenido_comparable(ruta):
+    """Bytes de un archivo generado, para compararlo con una referencia en cualquier sistema.
+
+    Los JSON se escriben en modo texto, así que su salto de línea es el del sistema (CRLF en
+    Windows, LF en Linux): se normaliza. Los CSV se comparan tal cual, porque el módulo ``csv``
+    escribe siempre ``\r\n``.
+    """
+    contenido = Path(ruta).read_bytes()
+    return contenido.replace(b"\r\n", b"\n") if Path(ruta).suffix == ".json" else contenido
+
+
 class _FechaFija:
     @staticmethod
     def now():

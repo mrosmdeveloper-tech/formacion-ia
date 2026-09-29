@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import DATOS, EJEMPLOS
+from conftest import DATOS, EJEMPLOS, contenido_comparable
 from gestor_json.config import Categoria, Nivel
 from gestor_json.inferencia import inferir_de_modelos
 from gestor_json.jsonschema_formato import (
@@ -276,7 +276,7 @@ def test_la_fabrica_usa_el_esquema_guardado_con_sus_reglas():
 # --------------------------------------------------------------------------- equivalencia de informes
 
 def informes(carpeta):
-    return {nombre: (Path(carpeta) / nombre).read_bytes()
+    return {nombre: contenido_comparable(Path(carpeta) / nombre)
             for nombre in ("incidencias.csv", "resumen_archivos.csv", "resumen_lote.json")}
 
 

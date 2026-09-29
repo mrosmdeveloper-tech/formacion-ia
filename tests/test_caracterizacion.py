@@ -21,6 +21,7 @@ import pytest
 
 import gestor_json.cli
 import gestor_json.registro
+from conftest import contenido_comparable
 
 DATOS = Path(__file__).parent / "datos"
 MODELOS = DATOS / "modelos"
@@ -690,7 +691,8 @@ def test_lote_de_ejemplo_identico_a_la_referencia(cli):
     """Caracterización global: registra los tres tipos de ``datos/ejemplos`` y valida su entrada.
 
     ``esquemas.json`` y los tres informes deben coincidir byte a byte con los de
-    ``tests/datos/esperado/ejemplos``, generados con la versión legacy y revisados a mano.
+    ``tests/datos/esperado/ejemplos``, generados con la versión legacy y revisados a mano (salvo el
+    salto de línea de los JSON, que depende del sistema).
     """
     ejemplos = Path(__file__).parent.parent / "datos" / "ejemplos"
     for tipo, patron, prefijo in [("pedido", "pedido_*.json", "pedido"),
@@ -703,9 +705,11 @@ def test_lote_de_ejemplo_identico_a_la_referencia(cli):
 
     assert codigo == 1
     esperado = DATOS / "esperado" / "ejemplos"
-    assert Path("esquemas.json").read_bytes() == (esperado / "esquemas.json").read_bytes()
+    assert contenido_comparable("esquemas.json") == contenido_comparable(
+        esperado / "esquemas.json")
     for informe in ("incidencias.csv", "resumen_archivos.csv", "resumen_lote.json"):
-        assert (Path("salida") / informe).read_bytes() == (esperado / informe).read_bytes(), informe
+        assert contenido_comparable(Path("salida") / informe) == contenido_comparable(
+            esperado / informe), informe
 
 
 # --------------------------------------------------------------------------- errores de validar

@@ -1,0 +1,597 @@
+{
+  "tipos": {
+    "pedido": {
+      "patron": "pedido_*.json",
+      "modelos_usados": 3,
+      "registrado": "2026-09-29T10:00:00",
+      "esquema": {
+        "t": "obj",
+        "nulo": false,
+        "campos": {
+          "id": {
+            "req": true,
+            "esq": {
+              "t": "str",
+              "nulo": false
+            }
+          },
+          "fecha": {
+            "req": true,
+            "esq": {
+              "t": "str",
+              "nulo": false
+            }
+          },
+          "cliente": {
+            "req": true,
+            "esq": {
+              "t": "obj",
+              "nulo": false,
+              "campos": {
+                "id": {
+                  "req": true,
+                  "esq": {
+                    "t": "str",
+                    "nulo": false
+                  }
+                },
+                "nombre": {
+                  "req": true,
+                  "esq": {
+                    "t": "str",
+                    "nulo": false
+                  }
+                },
+                "email": {
+                  "req": true,
+                  "esq": {
+                    "t": "str",
+                    "nulo": false
+                  }
+                },
+                "telefono": {
+                  "req": false,
+                  "esq": {
+                    "t": "str",
+                    "nulo": false
+                  }
+                },
+                "direccion": {
+                  "req": true,
+                  "esq": {
+                    "t": "obj",
+                    "nulo": false,
+                    "campos": {
+                      "calle": {
+                        "req": true,
+                        "esq": {
+                          "t": "str",
+                          "nulo": false
+                        }
+                      },
+                      "cp": {
+                        "req": true,
+                        "esq": {
+                          "t": "str",
+                          "nulo": false
+                        }
+                      },
+                      "ciudad": {
+                        "req": true,
+                        "esq": {
+                          "t": "str",
+                          "nulo": false
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "lineas": {
+            "req": true,
+            "esq": {
+              "t": "list",
+              "nulo": false,
+              "item": {
+                "t": "obj",
+                "nulo": false,
+                "campos": {
+                  "sku": {
+                    "req": true,
+                    "esq": {
+                      "t": "str",
+                      "nulo": false
+                    }
+                  },
+                  "descripcion": {
+                    "req": true,
+                    "esq": {
+                      "t": "str",
+                      "nulo": false
+                    }
+                  },
+                  "cantidad": {
+                    "req": true,
+                    "esq": {
+                      "t": "num",
+                      "nulo": false
+                    }
+                  },
+                  "precio": {
+                    "req": true,
+                    "esq": {
+                      "t": "num",
+                      "nulo": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "descuento": {
+            "req": false,
+            "esq": {
+              "t": "num",
+              "nulo": false
+            }
+          },
+          "notas": {
+            "req": true,
+            "esq": {
+              "t": "str",
+              "nulo": true
+            }
+          },
+          "pagado": {
+            "req": true,
+            "esq": {
+              "t": "bool",
+              "nulo": false
+            }
+          },
+          "etiquetas": {
+            "req": true,
+            "esq": {
+              "t": "list",
+              "nulo": false,
+              "item": {
+                "t": "str",
+                "nulo": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "lectura_sensor": {
+      "patron": "sensor_*.json",
+      "modelos_usados": 3,
+      "registrado": "2026-09-29T10:00:00",
+      "esquema": {
+        "t": "obj",
+        "nulo": false,
+        "campos": {
+          "sensor_id": {
+            "req": true,
+            "esq": {
+              "t": "str",
+              "nulo": false
+            }
+          },
+          "timestamp": {
+            "req": true,
+            "esq": {
+              "t": "str",
+              "nulo": false
+            }
+          },
+          "ubicacion": {
+            "req": true,
+            "esq": {
+              "t": "obj",
+              "nulo": false,
+              "campos": {
+                "lat": {
+                  "req": true,
+                  "esq": {
+                    "t": "num",
+                    "nulo": false
+                  }
+                },
+                "lon": {
+                  "req": true,
+                  "esq": {
+                    "t": "num",
+                    "nulo": false
+                  }
+                },
+                "planta": {
+                  "req": false,
+                  "esq": {
+                    "t": "num",
+                    "nulo": true
+                  }
+                }
+              }
+            }
+          },
+          "lecturas": {
+            "req": true,
+            "esq": {
+              "t": "list",
+              "nulo": false,
+              "item": {
+                "t": "obj",
+                "nulo": false,
+                "campos": {
+                  "magnitud": {
+                    "req": true,
+                    "esq": {
+                      "t": "str",
+                      "nulo": false
+                    }
+                  },
+                  "valor": {
+                    "req": true,
+                    "esq": {
+                      "t": "num",
+                      "nulo": false
+                    }
+                  },
+                  "unidad": {
+                    "req": true,
+                    "esq": {
+                      "t": "str",
+                      "nulo": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "bateria": {
+            "req": false,
+            "esq": {
+              "t": "num",
+              "nulo": false
+            }
+          },
+          "firmware": {
+            "req": true,
+            "esq": {
+              "t": "str",
+              "nulo": false
+            }
+          },
+          "alertas": {
+            "req": true,
+            "esq": {
+              "t": "list",
+              "nulo": false,
+              "item": {
+                "t": "str",
+                "nulo": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "actividad": {
+      "patron": "ruta_*.json",
+      "modelos_usados": 3,
+      "registrado": "2026-09-29T10:00:00",
+      "esquema": {
+        "t": "obj",
+        "nulo": false,
+        "campos": {
+          "id": {
+            "req": true,
+            "esq": {
+              "t": "str",
+              "nulo": false
+            }
+          },
+          "deporte": {
+            "req": true,
+            "esq": {
+              "t": "str",
+              "nulo": false
+            }
+          },
+          "inicio": {
+            "req": true,
+            "esq": {
+              "t": "str",
+              "nulo": false
+            }
+          },
+          "privada": {
+            "req": true,
+            "esq": {
+              "t": "bool",
+              "nulo": false
+            }
+          },
+          "usuario": {
+            "req": true,
+            "esq": {
+              "t": "obj",
+              "nulo": false,
+              "campos": {
+                "id": {
+                  "req": true,
+                  "esq": {
+                    "t": "str",
+                    "nulo": false
+                  }
+                },
+                "alias": {
+                  "req": true,
+                  "esq": {
+                    "t": "str",
+                    "nulo": false
+                  }
+                },
+                "peso_kg": {
+                  "req": true,
+                  "esq": {
+                    "t": "num",
+                    "nulo": false
+                  }
+                },
+                "%grasa": {
+                  "req": false,
+                  "esq": {
+                    "t": "num",
+                    "nulo": false
+                  }
+                }
+              }
+            }
+          },
+          "dispositivo": {
+            "req": true,
+            "esq": {
+              "t": "obj",
+              "nulo": false,
+              "campos": {
+                "modelo": {
+                  "req": true,
+                  "esq": {
+                    "t": "str",
+                    "nulo": false
+                  }
+                },
+                "firmware": {
+                  "req": true,
+                  "esq": {
+                    "t": "str",
+                    "nulo": false
+                  }
+                },
+                "sensores": {
+                  "req": true,
+                  "esq": {
+                    "t": "list",
+                    "nulo": false,
+                    "item": {
+                      "t": "str",
+                      "nulo": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "segmentos": {
+            "req": true,
+            "esq": {
+              "t": "list",
+              "nulo": false,
+              "item": {
+                "t": "obj",
+                "nulo": false,
+                "campos": {
+                  "nombre": {
+                    "req": true,
+                    "esq": {
+                      "t": "str",
+                      "nulo": false
+                    }
+                  },
+                  "tipo": {
+                    "req": true,
+                    "esq": {
+                      "t": "str",
+                      "nulo": false
+                    }
+                  },
+                  "puntos": {
+                    "req": true,
+                    "esq": {
+                      "t": "list",
+                      "nulo": false,
+                      "item": {
+                        "t": "obj",
+                        "nulo": false,
+                        "campos": {
+                          "lat": {
+                            "req": true,
+                            "esq": {
+                              "t": "num",
+                              "nulo": false
+                            }
+                          },
+                          "lon": {
+                            "req": true,
+                            "esq": {
+                              "t": "num",
+                              "nulo": false
+                            }
+                          },
+                          "alt": {
+                            "req": true,
+                            "esq": {
+                              "t": "num",
+                              "nulo": false
+                            }
+                          },
+                          "t": {
+                            "req": true,
+                            "esq": {
+                              "t": "num",
+                              "nulo": false
+                            }
+                          },
+                          "fc": {
+                            "req": false,
+                            "esq": {
+                              "t": "num",
+                              "nulo": false
+                            }
+                          },
+                          "cadencia": {
+                            "req": false,
+                            "esq": {
+                              "t": "num",
+                              "nulo": false
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "resumen": {
+            "req": true,
+            "esq": {
+              "t": "obj",
+              "nulo": false,
+              "campos": {
+                "distancia_km": {
+                  "req": true,
+                  "esq": {
+                    "t": "num",
+                    "nulo": false
+                  }
+                },
+                "duracion_s": {
+                  "req": true,
+                  "esq": {
+                    "t": "num",
+                    "nulo": false
+                  }
+                },
+                "desnivel_m": {
+                  "req": true,
+                  "esq": {
+                    "t": "num",
+                    "nulo": false
+                  }
+                },
+                "velocidad_media": {
+                  "req": true,
+                  "esq": {
+                    "t": "num",
+                    "nulo": false
+                  }
+                }
+              }
+            }
+          },
+          "pulso": {
+            "req": false,
+            "esq": {
+              "t": "obj",
+              "nulo": false,
+              "campos": {
+                "zona 1": {
+                  "req": true,
+                  "esq": {
+                    "t": "num",
+                    "nulo": false
+                  }
+                },
+                "zona 2": {
+                  "req": true,
+                  "esq": {
+                    "t": "num",
+                    "nulo": false
+                  }
+                },
+                "zona 3": {
+                  "req": true,
+                  "esq": {
+                    "t": "num",
+                    "nulo": false
+                  }
+                },
+                "zona 4": {
+                  "req": true,
+                  "esq": {
+                    "t": "num",
+                    "nulo": false
+                  }
+                },
+                "zona 5": {
+                  "req": true,
+                  "esq": {
+                    "t": "num",
+                    "nulo": false
+                  }
+                }
+              }
+            }
+          },
+          "fotos": {
+            "req": false,
+            "esq": {
+              "t": "list",
+              "nulo": false,
+              "item": {
+                "t": "obj",
+                "nulo": false,
+                "campos": {
+                  "archivo": {
+                    "req": true,
+                    "esq": {
+                      "t": "str",
+                      "nulo": false
+                    }
+                  },
+                  "lat": {
+                    "req": true,
+                    "esq": {
+                      "t": "num",
+                      "nulo": false
+                    }
+                  },
+                  "lon": {
+                    "req": true,
+                    "esq": {
+                      "t": "num",
+                      "nulo": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "comentario": {
+            "req": true,
+            "esq": {
+              "t": "str",
+              "nulo": true
+            }
+          }
+        }
+      }
+    }
+  }
+}

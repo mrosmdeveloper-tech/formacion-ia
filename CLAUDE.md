@@ -14,13 +14,35 @@ ejecuta solo la fase que indique el usuario y detente en cada ⏸ PARADA (el arc
 ## Estructura
 
 ```
-gestor.py                # programa legacy (v0), un único archivo (Fase 1)
-scripts/generar_datos.py # generador de datos sintéticos (Fase 1)
+main.py                  # punto de entrada: python main.py <comando> [opciones]
+gestor_json/
+  config.py              # constantes: límites, categorías, niveles, nombres de archivo
+  tipos_logicos.py       # enum TipoLogico y clasificar_valor (bool antes que número)
+  modelos.py             # dataclasses: NodoEsquema, CampoEsquema, TipoRegistrado, Incidencia,
+                         #   ResultadoArchivo, y la excepción ErrorGestor
+  rutas.py               # rutas JSONPath, su orden y su normalización ([*])
+  inferencia.py          # deducir el esquema de un documento (función pura)
+  fusion.py              # fusionar dos esquemas (función pura)
+  validacion.py          # interfaz Validador y ValidadorPropio (devuelve incidencias)
+  registro.py            # RegistroTipos y clasificación de archivos por patrón
+  almacenamiento.py      # interfaz AlmacenEsquemas y AlmacenEsquemasPropio (esquemas.json)
+  lote.py                # ValidadorLote (un archivo o una carpeta) y ResumenLote
+  informes.py            # CSV, resumen_lote.json y resumen por consola
+  cli.py                 # argparse con subcomandos, orquestación y códigos de salida
+scripts/generar_datos.py # generador de datos sintéticos
 datos/ejemplos/          # datos pequeños versionados
 datos/generados/         # lotes grandes generados (no versionado)
-tests/                   # tests con pytest (tests/datos/ con JSON mínimos)
-docs/                    # especificación, registro de IA, plan, ADR, benchmark
+tests/
+  test_caracterizacion.py  # tests de principio a fin (esquemas.json, informes, consola, códigos)
+  test_<módulo>.py         # tests unitarios de cada módulo
+  datos/                   # JSON mínimos diseñados a mano y referencia (esperado/) del lote de ejemplo
+docs/                    # especificación, registro de IA, plan de refactorización, ADR, benchmark
 ```
+
+Diseño: el registro, el lote y los informes solo dependen de las interfaces `Validador` y
+`AlmacenEsquemas`; el formato del esquema (hoy el propio de `esquemas.json`) queda encerrado en
+`validacion.py` y `almacenamiento.py`. Los códigos `"str"`, `"num"`… solo existen en
+`almacenamiento.py`.
 
 ## Comandos
 
@@ -33,14 +55,14 @@ pip install -r requirements-dev.txt
 
 Ejecutar:
 ```
-python gestor.py registrar --tipo pedido --patron "pedido_*.json" --modelo <archivo>
-python gestor.py validar <archivo_o_carpeta> --salida salida/
+python main.py registrar --tipo pedido --patron "pedido_*.json" --modelo <archivo>
+python main.py validar <archivo_o_carpeta> --salida salida/
 ```
 
 Tests y cobertura:
 ```
 python -m pytest
-python -m pytest --cov=gestor --cov-report=term-missing --cov-report=html
+python -m pytest --cov=gestor_json --cov-report=term-missing --cov-report=html
 ```
 
 ## Reglas
@@ -54,7 +76,11 @@ python -m pytest --cov=gestor --cov-report=term-missing --cov-report=html
 - Nunca versionar datos generados grandes (van a `datos/generados/`), ni tokens o contraseñas.
 - Todos los datos son inventados por el generador del proyecto.
 - Mantener `docs/registro-ia.md` al final de cada fase, sin inventar tiempos.
-- `gestor.py` tiene estilo legacy **a propósito** (Fase 1): no mejorarlo hasta la Fase 3.
+- `tests/test_caracterizacion.py` fija el comportamiento observable (mensajes, informes byte a
+  byte, códigos de salida): un cambio de comportamiento debe ser deliberado y actualizar la
+  referencia de forma explícita.
+- Los mensajes de error de la CLI son los del programa original; `cli.py` no deja que `argparse`
+  imprima los suyos.
 
 ## Trampas conocidas
 

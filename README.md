@@ -199,7 +199,7 @@ Cada pull request y cada push a `main` ejecutan el workflow
 importa esa cobertura. El token de SonarQube está en el secreto `SONAR_TOKEN` del repositorio, no
 en ningún archivo.
 
-Resultado del análisis del PR #2 (JSON Schema), sobre `gestor_json/` (668 líneas de código):
+Resultado del análisis del PR #2 (JSON Schema), sobre `gestor_json/` (1125 líneas de código):
 
 | Métrica | Resultado |
 |---|---|
@@ -220,6 +220,10 @@ Revisión de los avisos de seguridad:
   - `pythonsecurity:S8707` (×2), *path traversal* en `exportar-vscode --salida`: es la ruta de
     destino que elige el usuario, como en `validar --salida`; el programa se ejecuta con sus
     permisos y no cruza ninguna frontera de privilegios.
+  - `pythonsecurity:S2083` y `pythonsecurity:S8707` en `leer_json` (detectados al analizar
+    `main`, sobre código anterior al PR): la ruta sale del índice `registro.json`, cuyas entradas
+    se validan antes de abrir nada (solo nombres simples, sin separadores ni `..`), o del
+    `--salida` de `exportar-vscode`, que elige el usuario.
   - `python:S2245` (×2), generador pseudoaleatorio en `scripts/generar_datos.py`: el azar solo
     decide qué datos inventados se generan y el lote tiene que ser reproducible con una semilla,
     algo que `secrets` no permite. Además, `scripts/` queda fuera del análisis

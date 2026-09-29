@@ -1,0 +1,20 @@
+# Entorno y cachés de Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Cobertura y análisis de calidad
+.coverage
+coverage.xml
+htmlcov/
+.scannerwork/
+
+# Datos y salidas generadas
+datos/generados/
+salida/
+esquemas.json
+esquemas/
+
+# Guía de trabajo local (no se versiona)
+ROADMAP_GESTOR_JSON.md

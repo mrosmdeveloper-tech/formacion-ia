@@ -7,6 +7,29 @@ import csv
 import time
 from datetime import datetime
 
+from gestor_json.config import (
+    ARCHIVO_ESQUEMAS,
+    ARCHIVO_INCIDENCIAS,
+    ARCHIVO_RESUMEN_ARCHIVOS,
+    ARCHIVO_RESUMEN_LOTE,
+    EXTENSION_JSON,
+    MAX_INCIDENCIAS_POR_DEFECTO,
+    TOP_RUTAS,
+    Categoria,
+    Nivel,
+)
+from gestor_json.tipos_logicos import TipoLogico
+
+# Códigos de tipo del formato propio de esquemas.json
+CODIGOS = {
+    "bool": TipoLogico.BOOLEANO,
+    "list": TipoLogico.LISTA,
+    "num": TipoLogico.NUMERO,
+    "obj": TipoLogico.OBJETO,
+    "str": TipoLogico.TEXTO,
+    "unk": TipoLogico.DESCONOCIDO,
+}
+
 incidencias = []
 
 
@@ -97,20 +120,7 @@ def desc(e):
         tt = [e["t"]]
     s = ""
     for x in tt:
-        if x == "str":
-            n = "texto"
-        elif x == "num":
-            n = "numero"
-        elif x == "bool":
-            n = "booleano"
-        elif x == "obj":
-            n = "objeto"
-        elif x == "list":
-            n = "lista"
-        elif x == "unk":
-            n = "desconocido"
-        else:
-            n = x
+        n = CODIGOS[x].value
         if s != "":
             s = s + " | "
         s = s + n
@@ -146,8 +156,8 @@ def validar(v, e, ruta, est):
     if v is None:
         if e["nulo"] == False:
             incidencias.append({
-                "nivel": "error",
-                "categoria": "nulo_no_permitido",
+                "nivel": Nivel.ERROR,
+                "categoria": Categoria.NULO_NO_PERMITIDO,
                 "ruta": ruta,
                 "esperado": desc(e),
                 "encontrado": "nulo",
@@ -168,8 +178,8 @@ def validar(v, e, ruta, est):
         tv = "unk"
     if tv not in tt:
         incidencias.append({
-            "nivel": "error",
-            "categoria": "tipo_incorrecto",
+            "nivel": Nivel.ERROR,
+            "categoria": Categoria.TIPO_INCORRECTO,
             "ruta": ruta,
             "esperado": desc(e),
             "encontrado": desc({"t": tv, "nulo": False}),
@@ -187,8 +197,8 @@ def validar(v, e, ruta, est):
             else:
                 if e["campos"][k]["req"]:
                     incidencias.append({
-                        "nivel": "error",
-                        "categoria": "falta_campo",
+                        "nivel": Nivel.ERROR,
+                        "categoria": Categoria.FALTA_CAMPO,
                         "ruta": r,
                         "esperado": desc(e["campos"][k]["esq"]),
                         "encontrado": "ausente",
@@ -213,12 +223,12 @@ def validar(v, e, ruta, est):
                 else:
                     aux = "lista"
                 if est:
-                    tmp = "error"
+                    tmp = Nivel.ERROR
                 else:
-                    tmp = "aviso"
+                    tmp = Nivel.AVISO
                 incidencias.append({
                     "nivel": tmp,
-                    "categoria": "campo_extra",
+                    "categoria": Categoria.CAMPO_EXTRA,
                     "ruta": r,
                     "esperado": "ausente",
                     "encontrado": aux,
@@ -276,9 +286,9 @@ def main():
         if len(mods) == 0:
             print("Error: hay que indicar al menos un --modelo")
             sys.exit(2)
-        if os.path.exists("esquemas.json"):
+        if os.path.exists(ARCHIVO_ESQUEMAS):
             try:
-                f = open("esquemas.json", encoding="utf-8-sig")
+                f = open(ARCHIVO_ESQUEMAS, encoding="utf-8-sig")
                 d = json.load(f)
                 f.close()
             except Exception as ex:
@@ -308,7 +318,7 @@ def main():
             "registrado": datetime.now().isoformat(timespec="seconds"),
             "esquema": e,
         }
-        f = open("esquemas.json", "w", encoding="utf-8")
+        f = open(ARCHIVO_ESQUEMAS, "w", encoding="utf-8")
         json.dump(d, f, indent=2, ensure_ascii=False)
         f.close()
         print("Tipo '" + tipo + "' registrado con " + str(len(mods)) + " modelo(s) (patrón: " + pat + ")")
@@ -332,9 +342,9 @@ def main():
         if len(mods) == 0:
             print("Error: hay que indicar al menos un --modelo")
             sys.exit(2)
-        if os.path.exists("esquemas.json"):
+        if os.path.exists(ARCHIVO_ESQUEMAS):
             try:
-                f = open("esquemas.json", encoding="utf-8-sig")
+                f = open(ARCHIVO_ESQUEMAS, encoding="utf-8-sig")
                 d = json.load(f)
                 f.close()
             except Exception as ex:
@@ -357,7 +367,7 @@ def main():
             e = fusionar(e, inferir(v))
         d["tipos"][tipo]["esquema"] = e
         d["tipos"][tipo]["modelos_usados"] = d["tipos"][tipo]["modelos_usados"] + len(mods)
-        f = open("esquemas.json", "w", encoding="utf-8")
+        f = open(ARCHIVO_ESQUEMAS, "w", encoding="utf-8")
         json.dump(d, f, indent=2, ensure_ascii=False)
         f.close()
         print("Tipo '" + tipo + "' actualizado: " + str(d["tipos"][tipo]["modelos_usados"]) + " modelo(s) en total")
@@ -365,9 +375,9 @@ def main():
         if len(args) > 0:
             print("Error: argumento no reconocido: " + args[0])
             sys.exit(2)
-        if os.path.exists("esquemas.json"):
+        if os.path.exists(ARCHIVO_ESQUEMAS):
             try:
-                f = open("esquemas.json", encoding="utf-8-sig")
+                f = open(ARCHIVO_ESQUEMAS, encoding="utf-8-sig")
                 d = json.load(f)
                 f.close()
             except Exception as ex:
@@ -395,9 +405,9 @@ def main():
         if tipo is None:
             print("Error: falta --tipo")
             sys.exit(2)
-        if os.path.exists("esquemas.json"):
+        if os.path.exists(ARCHIVO_ESQUEMAS):
             try:
-                f = open("esquemas.json", encoding="utf-8-sig")
+                f = open(ARCHIVO_ESQUEMAS, encoding="utf-8-sig")
                 d = json.load(f)
                 f.close()
             except Exception as ex:
@@ -427,9 +437,9 @@ def main():
         if tipo is None:
             print("Error: falta --tipo")
             sys.exit(2)
-        if os.path.exists("esquemas.json"):
+        if os.path.exists(ARCHIVO_ESQUEMAS):
             try:
-                f = open("esquemas.json", encoding="utf-8-sig")
+                f = open(ARCHIVO_ESQUEMAS, encoding="utf-8-sig")
                 d = json.load(f)
                 f.close()
             except Exception as ex:
@@ -441,7 +451,7 @@ def main():
             print("Error: el tipo '" + tipo + "' no existe")
             sys.exit(2)
         del d["tipos"][tipo]
-        f = open("esquemas.json", "w", encoding="utf-8")
+        f = open(ARCHIVO_ESQUEMAS, "w", encoding="utf-8")
         json.dump(d, f, indent=2, ensure_ascii=False)
         f.close()
         print("Tipo '" + tipo + "' eliminado")
@@ -449,7 +459,7 @@ def main():
         ruta = None
         sal = None
         est = False
-        mx = 200
+        mx = MAX_INCIDENCIAS_POR_DEFECTO
         i = 0
         while i < len(args):
             if args[i] == "--salida" and i + 1 < len(args):
@@ -487,9 +497,9 @@ def main():
             print("Error: no existe " + ruta)
             sys.exit(2)
         t0 = time.perf_counter()
-        if os.path.exists("esquemas.json"):
+        if os.path.exists(ARCHIVO_ESQUEMAS):
             try:
-                f = open("esquemas.json", encoding="utf-8-sig")
+                f = open(ARCHIVO_ESQUEMAS, encoding="utf-8-sig")
                 d = json.load(f)
                 f.close()
             except Exception as ex:
@@ -500,16 +510,16 @@ def main():
         if os.path.isdir(ruta):
             arch = []
             for n in sorted(os.listdir(ruta)):
-                if os.path.isfile(os.path.join(ruta, n)) and n.lower().endswith(".json"):
+                if os.path.isfile(os.path.join(ruta, n)) and n.lower().endswith(EXTENSION_JSON):
                     arch.append(os.path.join(ruta, n))
         else:
             arch = [ruta]
         try:
             os.makedirs(sal, exist_ok=True)
-            f1 = open(os.path.join(sal, "incidencias.csv"), "w", newline="", encoding="utf-8")
+            f1 = open(os.path.join(sal, ARCHIVO_INCIDENCIAS), "w", newline="", encoding="utf-8")
             w1 = csv.writer(f1)
             w1.writerow(["archivo", "tipo", "nivel", "categoria", "ruta", "esperado", "encontrado", "mensaje"])
-            f2 = open(os.path.join(sal, "resumen_archivos.csv"), "w", newline="", encoding="utf-8")
+            f2 = open(os.path.join(sal, ARCHIVO_RESUMEN_ARCHIVOS), "w", newline="", encoding="utf-8")
             w2 = csv.writer(f2)
             w2.writerow(["archivo", "tipo", "valido", "errores", "avisos"])
         except Exception as ex:
@@ -534,8 +544,8 @@ def main():
             tipo = ""
             if len(cands) == 0:
                 incidencias.append({
-                    "nivel": "aviso",
-                    "categoria": "sin_tipo",
+                    "nivel": Nivel.AVISO,
+                    "categoria": Categoria.SIN_TIPO,
                     "ruta": "",
                     "esperado": "",
                     "encontrado": "",
@@ -554,8 +564,8 @@ def main():
                             best = lit
                             tipo = c
                     incidencias.append({
-                        "nivel": "aviso",
-                        "categoria": "varios_tipos",
+                        "nivel": Nivel.AVISO,
+                        "categoria": Categoria.VARIOS_TIPOS,
                         "ruta": "",
                         "esperado": tipo,
                         "encontrado": ", ".join(cands),
@@ -568,8 +578,8 @@ def main():
                     ok = True
                 except Exception as ex:
                     incidencias.append({
-                        "nivel": "error",
-                        "categoria": "json_invalido",
+                        "nivel": Nivel.ERROR,
+                        "categoria": Categoria.JSON_INVALIDO,
                         "ruta": "$",
                         "esperado": "",
                         "encontrado": "",
@@ -586,8 +596,8 @@ def main():
                 aux = len(incidencias)
                 incidencias = incidencias[:mx]
                 incidencias.append({
-                    "nivel": "aviso",
-                    "categoria": "incidencias_truncadas",
+                    "nivel": Nivel.AVISO,
+                    "categoria": Categoria.INCIDENCIAS_TRUNCADAS,
                     "ruta": "",
                     "esperado": str(mx),
                     "encontrado": str(aux),
@@ -596,7 +606,7 @@ def main():
             ne = 0
             na = 0
             for x in incidencias:
-                if x["nivel"] == "error":
+                if x["nivel"] == Nivel.ERROR:
                     ne = ne + 1
                 else:
                     na = na + 1
@@ -632,7 +642,7 @@ def main():
             if t in rutas:
                 tmp = sorted(rutas[t].items(), key=lambda x: (-x[1], x[0]))
                 top[t] = []
-                for x in tmp[:10]:
+                for x in tmp[:TOP_RUTAS]:
                     top[t].append({"ruta": x[0], "incidencias": x[1]})
         aux = {}
         for c in sorted(cats):
@@ -648,7 +658,7 @@ def main():
             "rutas_mas_frecuentes": top,
             "tiempo_s": seg,
         }
-        f = open(os.path.join(sal, "resumen_lote.json"), "w", encoding="utf-8")
+        f = open(os.path.join(sal, ARCHIVO_RESUMEN_LOTE), "w", encoding="utf-8")
         json.dump(res, f, indent=2, ensure_ascii=False)
         f.close()
         print("Archivos procesados: " + str(tot))

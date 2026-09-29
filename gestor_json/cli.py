@@ -14,15 +14,18 @@ import os
 import re
 import sys
 import time
-from typing import NoReturn
+from dataclasses import dataclass
+from typing import Callable, NoReturn
 
-from gestor_json.almacenamiento import AlmacenEsquemasPropio
+from gestor_json.almacenamiento import AlmacenEsquemas, AlmacenEsquemasPropio
 from gestor_json.config import MAX_INCIDENCIAS_POR_DEFECTO
 from gestor_json.informes import EscritorInformes, escribir_resumen_lote, imprimir_resumen
+from gestor_json.jsonschema_formato import AlmacenEsquemasJsonSchema, crear_validador_jsonschema
 from gestor_json.lote import ResumenLote, ValidadorLote, listar_archivos
 from gestor_json.modelos import ErrorGestor, NodoEsquema
 from gestor_json.registro import RegistroTipos
 from gestor_json.tipos_logicos import TipoLogico
+from gestor_json.validacion import FabricaValidador, crear_validador_propio
 
 SALIDA_CORRECTA = 0
 SALIDA_CON_ERRORES = 1
@@ -31,6 +34,21 @@ SALIDA_FALLO = 2
 COMANDOS = ("registrar", "actualizar", "tipos", "mostrar", "eliminar", "validar")
 
 _FALTA_VALOR = re.compile(r"argument (\S+): expected one argument")
+
+
+@dataclass(frozen=True)
+class Formato:
+    """Formato de esquema: dónde se guardan los tipos y con qué se validan."""
+
+    crear_almacen: Callable[[], AlmacenEsquemas]
+    crear_validador: FabricaValidador
+
+
+FORMATOS = {
+    "jsonschema": Formato(AlmacenEsquemasJsonSchema, crear_validador_jsonschema),
+    "propio": Formato(AlmacenEsquemasPropio, crear_validador_propio),
+}
+FORMATO_POR_DEFECTO = "jsonschema"
 
 
 class _ParserSinMensajes(argparse.ArgumentParser):
@@ -50,7 +68,9 @@ def _crear_parser(programa: str) -> argparse.ArgumentParser:
     comandos = parser.add_subparsers(dest="comando")
 
     def subcomando(nombre: str) -> argparse.ArgumentParser:
-        return comandos.add_parser(nombre, add_help=False, allow_abbrev=False)
+        parser_comando = comandos.add_parser(nombre, add_help=False, allow_abbrev=False)
+        parser_comando.add_argument("--formato", default=FORMATO_POR_DEFECTO)
+        return parser_comando
 
     registrar = subcomando("registrar")
     registrar.add_argument("--tipo")
@@ -88,7 +108,7 @@ def main(argv: list[str] | None = None) -> int:
         argumentos, sobrantes = _crear_parser(programa).parse_known_args(argv)
         if sobrantes:
             raise ErrorGestor(f"argumento no reconocido: {sobrantes[0]}")
-        registro = RegistroTipos(AlmacenEsquemasPropio())
+        registro = RegistroTipos(_formato(argumentos).crear_almacen())
         return _EJECUTORES[argumentos.comando](argumentos, registro)
     except ErrorGestor as error:
         print(f"Error: {error}")
@@ -167,7 +187,8 @@ def _validar(argumentos: argparse.Namespace, registro: RegistroTipos) -> int:
     except Exception as error:  # noqa: BLE001 - cualquier fallo al crear los informes
         raise ErrorGestor(
             f"no se pueden crear los informes en {argumentos.salida}: {error}") from error
-    validador = ValidadorLote(tipos, argumentos.estricto, max_incidencias)
+    validador = ValidadorLote(tipos, argumentos.estricto, max_incidencias,
+                              _formato(argumentos).crear_validador)
     resumen = ResumenLote.para(tipos)
     with informes:
         for archivo in archivos:
@@ -192,6 +213,13 @@ _EJECUTORES = {
 
 
 # --------------------------------------------------------------------------- utilidades
+
+def _formato(argumentos: argparse.Namespace) -> Formato:
+    if argumentos.formato not in FORMATOS:
+        raise ErrorGestor(f"formato desconocido: {argumentos.formato} "
+                          f"(usa {' o '.join(FORMATOS)})")
+    return FORMATOS[argumentos.formato]
+
 
 def _exigir_tipo(tipo: str | None) -> None:
     if tipo is None:

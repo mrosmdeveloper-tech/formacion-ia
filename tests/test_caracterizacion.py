@@ -49,6 +49,9 @@ def cli(tmp_path, monkeypatch, capsys):
     FechaFija.ahora = FECHA
     monkeypatch.setattr(gestor_json.registro, "datetime", FechaFija)
     monkeypatch.setattr(gestor_json.cli, "time", SimpleNamespace(perf_counter=lambda: 0.0))
+    # Estos tests fijan el comportamiento del formato propio (esquemas.json), el del programa
+    # original; JSON Schema tiene sus propios tests de equivalencia.
+    monkeypatch.setattr(gestor_json.cli, "FORMATO_POR_DEFECTO", "propio")
 
     def ejecutar(*args):
         argv = [str(a) for a in args]

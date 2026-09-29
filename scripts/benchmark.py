@@ -37,7 +37,8 @@ TIPOS = (
 
 # Argumentos que selecciona cada formato de esquema en la línea de comandos.
 FORMATOS: dict[str, list[str]] = {
-    "propio": [],
+    "propio": ["--formato", "propio"],
+    "jsonschema": ["--formato", "jsonschema"],
 }
 
 # Código que ejecuta cada subproceso: recibe la configuración en JSON y devuelve las medidas.

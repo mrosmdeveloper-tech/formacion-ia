@@ -6,8 +6,10 @@ La especificación completa está en [docs/especificacion.md](docs/especificacio
 
 ## Requisitos
 
-- Python 3.10 o superior (solo biblioteca estándar).
-- Para desarrollo: `pytest` y `pytest-cov`.
+- Python 3.10 o superior.
+- Dependencias: `jsonschema` y `rfc3339-validator` ([requirements.txt](requirements.txt)).
+- Para desarrollo, además: `pytest`, `pytest-cov`, `mypy`, `pyflakes` y `types-jsonschema`
+  ([requirements-dev.txt](requirements-dev.txt), que incluye `requirements.txt`).
 
 ```powershell
 python -m venv .venv
@@ -24,10 +26,13 @@ python main.py tipos
 python main.py mostrar --tipo <nombre>
 python main.py eliminar --tipo <nombre>
 python main.py validar <archivo_o_carpeta> --salida <carpeta> [--estricto] [--max-incidencias 200]
+python main.py migrar-esquemas [--desde esquemas.json] [--hacia esquemas] [--verificar <archivo_o_carpeta>]
+python main.py exportar-vscode [--esquemas esquemas] [--salida .vscode/settings.json]
 ```
 
 - El punto de entrada es `main.py`; el programa está en el paquete `gestor_json/`.
-- Los esquemas se guardan en `esquemas.json`, en la carpeta desde la que se ejecuta el programa.
+- Los seis primeros comandos aceptan `--formato jsonschema|propio` (por defecto, `jsonschema`;
+  ver [Formatos de esquema](#formatos-de-esquema)).
 - Cada archivo se clasifica por su nombre con el patrón de cada tipo (estilo `fnmatch`). Si encaja
   con varios, gana el patrón más específico.
 - `validar` escribe en la carpeta de salida `incidencias.csv`, `resumen_archivos.csv` y
@@ -53,6 +58,8 @@ python main.py validar <archivo_o_carpeta> --salida <carpeta> [--estricto] [--ma
    python main.py registrar --tipo actividad --patron "ruta_*.json" --modelo $m/ruta_modelo_1.json --modelo $m/ruta_modelo_2.json --modelo $m/ruta_modelo_3.json
    ```
 
+   (En Git Bash, la primera línea es `m="datos/generados/lote_1000/modelos"`.)
+
 3. Consultar los tipos y el esquema deducido:
 
    ```powershell
@@ -69,26 +76,98 @@ python main.py validar <archivo_o_carpeta> --salida <carpeta> [--estricto] [--ma
 Para una prueba rápida, en `datos/ejemplos/` hay modelos de los tres tipos y 14 archivos pequeños
 (válidos y con errores) versionados en el repositorio.
 
+## Formatos de esquema
+
+### JSON Schema (por defecto)
+
+Los esquemas deducidos se guardan como **JSON Schema draft 2020-12**, un archivo por tipo, y se
+validan con la librería `jsonschema` (decisión: [ADR 0001](docs/adr/0001-json-schema.md)):
+
+```
+esquemas/
+  registro.json               # índice: tipo, patrón, archivo, modelos usados y fecha, en orden de registro
+  pedido.schema.json
+  lectura_sensor.schema.json
+  actividad.schema.json
+```
+
+Además de tipos, campos obligatorios y nulos, el esquema admite las reglas estándar de JSON Schema
+(`minimum`/`maximum`, `pattern`, `enum`, `format`, `minItems`…). Un valor que las incumple da una
+incidencia `regla_incumplida` (nivel error).
+
+### Añadir una regla a mano
+
+El esquema deducido se puede enriquecer editando su `.schema.json`. Por ejemplo, para exigir que la
+cantidad de cada línea de un pedido sea al menos 1, en `esquemas/pedido.schema.json`:
+
+```json
+"cantidad": {
+  "type": "number",
+  "minimum": 1
+}
+```
+
+Al validar, una línea con `"cantidad": 0` da:
+
+```
+pedido_0042.json,pedido,error,regla_incumplida,$.lineas[3].cantidad,minimum: 1,0,Regla 'minimum' incumplida: debe ser mayor o igual que 1
+```
+
+Las reglas añadidas a mano **se conservan** cuando el esquema se vuelve a generar (por ejemplo, con
+`actualizar`). Lo que se regenera a partir de los modelos es la estructura: `type`, `properties`,
+`required`, `additionalProperties` e `items`.
+
+Los formatos se comprueban de verdad (`email`, `date-time`…). `date-time` sigue el RFC 3339 y
+**exige zona horaria** (`2026-09-29T10:00:00Z` o `…+02:00`): las fechas del generador de datos no
+la llevan, así que esa regla las marcaría todas como incumplidas.
+
+### Formato propio (`--formato propio`)
+
+El formato original, en un único `esquemas.json`. Solo describe tipos, obligatorios, nulos y
+uniones (ver [docs/capacidades.md](docs/capacidades.md)). Se mantiene para comparar y para migrar.
+
+### Migrar del formato propio
+
+```powershell
+python main.py migrar-esquemas --desde esquemas.json --hacia esquemas --verificar datos/ejemplos/entrada
+```
+
+Copia todos los tipos (con su patrón, sus modelos usados, su fecha y el orden de registro) y, con
+`--verificar`, valida esos archivos con los dos formatos y comprueba que dan las mismas incidencias.
+
+### Validación en VS Code
+
+```powershell
+python main.py exportar-vscode
+```
+
+Genera `.vscode/settings.json` con `json.schemas`, que asocia cada patrón con su esquema: al abrir
+en VS Code un `pedido_*.json`, el editor subraya los errores mientras se escribe. Si el archivo ya
+existe, conserva el resto de la configuración.
+
 ## Estructura
 
 ```
-main.py                  # punto de entrada
+main.py                    # punto de entrada
 gestor_json/
-  cli.py                 # argumentos (argparse), orquestación y códigos de salida
-  registro.py            # alta, actualización, baja y clasificación de tipos por patrón
-  almacenamiento.py      # lectura y escritura de esquemas.json
-  inferencia.py          # deducción del esquema a partir de un modelo
-  fusion.py              # fusión de esquemas de varios modelos
-  validacion.py          # validación de un documento contra su esquema
-  lote.py                # validación de un archivo o carpeta y estadísticas del lote
-  informes.py            # CSV, resumen_lote.json y resumen por consola
-  modelos.py             # estructuras de datos (esquema, tipo, incidencia, resultado)
-  rutas.py               # rutas JSONPath de las incidencias
-  tipos_logicos.py       # tipos lógicos y clasificación de valores
-  config.py              # constantes
-scripts/generar_datos.py # generador de datos sintéticos
-tests/                   # tests de caracterización y unitarios
-docs/                    # especificación, plan de refactorización, registro de IA
+  cli.py                   # argumentos (argparse), orquestación y códigos de salida
+  registro.py              # alta, actualización, baja y clasificación de tipos por patrón
+  almacenamiento.py        # interfaz AlmacenEsquemas y formato propio (esquemas.json)
+  jsonschema_formato.py    # JSON Schema: conversión, almacén, validador y exportación a VS Code
+  migracion.py             # migración del formato propio a JSON Schema y su verificación
+  inferencia.py            # deducción del esquema a partir de un modelo
+  fusion.py                # fusión de esquemas de varios modelos
+  validacion.py            # interfaz Validador y validador del formato propio
+  lote.py                  # validación de un archivo o carpeta y estadísticas del lote
+  informes.py              # CSV, resumen_lote.json y resumen por consola
+  modelos.py               # estructuras de datos (esquema, tipo, incidencia, resultado)
+  rutas.py                 # rutas JSONPath de las incidencias
+  tipos_logicos.py         # tipos lógicos y clasificación de valores
+  config.py                # constantes
+scripts/generar_datos.py   # generador de datos sintéticos
+scripts/benchmark.py       # benchmark de registro y validación por formato
+tests/                     # tests de caracterización, unitarios, de JSON Schema y de migración
+docs/                      # especificación, plan de refactorización, ADR, benchmark, capacidades, registro de IA
 ```
 
 El programa nació como un único archivo, `gestor.py`, con estilo legacy deliberado, y se
@@ -102,10 +181,23 @@ python -m pytest
 python -m pytest --cov=gestor_json --cov-report=term-missing --cov-report=html
 ```
 
-- `tests/test_caracterizacion.py`: ejecutan los comandos de principio a fin y comparan
-  `esquemas.json`, los informes (byte a byte), la consola y los códigos de salida. Se escribieron
-  sobre la versión legacy antes de refactorizarla.
-- `tests/test_<módulo>.py`: tests unitarios de cada módulo.
+- `tests/test_caracterizacion.py`: ejecutan los comandos de principio a fin con el formato propio y
+  comparan `esquemas.json`, los informes (byte a byte), la consola y los códigos de salida. Se
+  escribieron sobre la versión legacy antes de refactorizarla.
+- `tests/test_jsonschema_formato.py`: conversión, almacén y validador de JSON Schema; equivalencia
+  de los informes con los dos formatos; reglas añadidas a mano (`minimum`, `pattern`, `format`,
+  `enum`…).
+- `tests/test_migracion.py`: migración, verificación y exportación a VS Code.
+- `tests/test_<módulo>.py`: tests unitarios del resto de módulos.
+
+## Benchmark
+
+```powershell
+python scripts/benchmark.py datos/generados/lote_1000 datos/generados/lote_5000 --formatos propio jsonschema --salida docs/benchmark.md
+```
+
+Mide, en un subproceso nuevo por repetición, el registro y la validación de cada lote con cada
+formato. Resultados: [docs/benchmark.md](docs/benchmark.md).
 
 ## Generador de datos
 

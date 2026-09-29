@@ -26,23 +26,39 @@ gestor_json/
   validacion.py          # interfaz Validador y ValidadorPropio (devuelve incidencias)
   registro.py            # RegistroTipos y clasificación de archivos por patrón
   almacenamiento.py      # interfaz AlmacenEsquemas y AlmacenEsquemasPropio (esquemas.json)
+  jsonschema_formato.py  # JSON Schema: conversión (ida y vuelta), AlmacenEsquemasJsonSchema,
+                         #   ValidadorJsonSchema (traduce errores a incidencias) y exportar a VS Code
+  migracion.py           # migrar esquemas.json a esquemas/ y verificar que las incidencias coinciden
   lote.py                # ValidadorLote (un archivo o una carpeta) y ResumenLote
   informes.py            # CSV, resumen_lote.json y resumen por consola
   cli.py                 # argparse con subcomandos, orquestación y códigos de salida
 scripts/generar_datos.py # generador de datos sintéticos
+scripts/benchmark.py     # benchmark de registro y validación por formato (docs/benchmark.md)
+esquemas/                # tipos registrados en JSON Schema (formato por defecto; no versionado)
+esquemas.json            # tipos registrados en el formato propio (no versionado)
 datos/ejemplos/          # datos pequeños versionados
 datos/generados/         # lotes grandes generados (no versionado)
 tests/
-  test_caracterizacion.py  # tests de principio a fin (esquemas.json, informes, consola, códigos)
-  test_<módulo>.py         # tests unitarios de cada módulo
+  conftest.py              # fixture ejecutar: la CLI en una carpeta temporal, fecha y reloj fijos
+  test_caracterizacion.py  # tests de principio a fin con el formato propio (esquemas.json,
+                           #   informes, consola, códigos)
+  test_jsonschema_formato.py  # conversión, almacén, validador, equivalencia y reglas a mano
+  test_migracion.py        # migración, verificación y exportación a VS Code
+  test_<módulo>.py         # tests unitarios del resto de módulos
   datos/                   # JSON mínimos diseñados a mano y referencia (esperado/) del lote de ejemplo
 docs/                    # especificación, registro de IA, plan de refactorización, ADR, benchmark
 ```
 
 Diseño: el registro, el lote y los informes solo dependen de las interfaces `Validador` y
-`AlmacenEsquemas`; el formato del esquema (hoy el propio de `esquemas.json`) queda encerrado en
-`validacion.py` y `almacenamiento.py`. Los códigos `"str"`, `"num"`… solo existen en
-`almacenamiento.py`.
+`AlmacenEsquemas`. Hay dos formatos de esquema, que se eligen con `--formato` (`cli.FORMATOS`):
+`jsonschema` (por defecto; `jsonschema_formato.py`) y `propio` (`almacenamiento.py` y
+`validacion.py`). Los códigos `"str"`, `"num"`… solo existen en `almacenamiento.py`. Decisión y
+alternativas: `docs/adr/0001-json-schema.md`.
+
+JSON Schema: la inferencia y la fusión siguen trabajando con `NodoEsquema`; se convierte al
+guardar. `TipoRegistrado.esquema_json` guarda el documento tal como está en disco, con las reglas
+añadidas a mano, que se conservan al regenerar y son las que usa el validador. Un desconocido que
+procede de un `null` se marca con `"examples": [null]`.
 
 ## Comandos
 
@@ -56,7 +72,10 @@ pip install -r requirements-dev.txt
 Ejecutar:
 ```
 python main.py registrar --tipo pedido --patron "pedido_*.json" --modelo <archivo>
-python main.py validar <archivo_o_carpeta> --salida salida/
+python main.py validar <archivo_o_carpeta> --salida salida/ [--formato jsonschema|propio]
+python main.py migrar-esquemas --verificar datos/ejemplos/entrada
+python main.py exportar-vscode
+python scripts/benchmark.py datos/generados/lote_1000 --formatos propio jsonschema
 ```
 
 Tests y cobertura:
@@ -67,7 +86,8 @@ python -m pytest --cov=gestor_json --cov-report=term-missing --cov-report=html
 
 ## Reglas
 
-- Python 3.10+. Hasta la Fase 4, solo biblioteca estándar (en desarrollo, `pytest` y `pytest-cov`).
+- Python 3.10+. Dependencias de ejecución: `jsonschema` y `rfc3339-validator` (`requirements.txt`);
+  de desarrollo, `requirements-dev.txt` (incluye `mypy --disallow-untyped-defs` sin avisos).
 - Nunca usar `input()`: todo por argumentos y archivos.
 - **Ejecuta los tests antes de cada commit.** No hagas commit con tests en rojo.
 - Commits pequeños, en español, formato *Conventional Commits* (`feat:`, `fix:`, `test:`,
@@ -77,8 +97,9 @@ python -m pytest --cov=gestor_json --cov-report=term-missing --cov-report=html
 - Todos los datos son inventados por el generador del proyecto.
 - Mantener `docs/registro-ia.md` al final de cada fase, sin inventar tiempos.
 - `tests/test_caracterizacion.py` fija el comportamiento observable (mensajes, informes byte a
-  byte, códigos de salida): un cambio de comportamiento debe ser deliberado y actualizar la
-  referencia de forma explícita.
+  byte, códigos de salida) con el formato propio: un cambio de comportamiento debe ser deliberado
+  y actualizar la referencia de forma explícita. Los informes con JSON Schema deben ser idénticos
+  (lo comprueban los tests de equivalencia).
 - Los mensajes de error de la CLI son los del programa original; `cli.py` no deja que `argparse`
   imprima los suyos.
 

@@ -1,0 +1,17 @@
+{
+  "id": "A-2",
+  "codigo": "7A",
+  "cantidad": 4.5,
+  "activo": false,
+  "notas": null,
+  "cliente": {
+    "nombre": "Luis",
+    "email": "luis@correo.example",
+    "telefono": "600000000"
+  },
+  "lineas": [],
+  "adjuntos": [],
+  "pulso": {
+    "zona 1": 0
+  }
+}

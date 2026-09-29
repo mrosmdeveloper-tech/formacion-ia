@@ -1,0 +1,28 @@
+{
+  "id": "A-3",
+  "codigo": 8,
+  "cantidad": 2,
+  "activo": true,
+  "notas": null,
+  "cliente": {
+    "nombre": "Eva"
+  },
+  "lineas": [
+    {
+      "sku": "S1",
+      "precio": 1
+    },
+    {
+      "sku": "S2"
+    }
+  ],
+  "adjuntos": [
+    1,
+    "x",
+    null,
+    {}
+  ],
+  "pulso": {
+    "zona 1": 5
+  }
+}

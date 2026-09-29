@@ -1,0 +1,4 @@
+# Los datos de prueba y de ejemplo se comparan byte a byte (y los mensajes de JSON
+# inválido incluyen posiciones de carácter): no se convierten los finales de línea.
+datos/** -text
+tests/datos/** -text

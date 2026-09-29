@@ -1,0 +1,20 @@
+{
+  "id": null,
+  "codigo": 8,
+  "cantidad": 2,
+  "activo": true,
+  "notas": null,
+  "cliente": null,
+  "lineas": [
+    null
+  ],
+  "adjuntos": [
+    1,
+    "x",
+    null,
+    {}
+  ],
+  "pulso": {
+    "zona 1": 5
+  }
+}

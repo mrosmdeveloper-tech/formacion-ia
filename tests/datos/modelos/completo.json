@@ -1,0 +1,31 @@
+{
+  "texto": "hola",
+  "vacio": "",
+  "entero": 150,
+  "decimal": 9.2,
+  "booleano": true,
+  "nulo": null,
+  "lista_vacia": [],
+  "numeros": [
+    1,
+    2.5
+  ],
+  "objetos": [
+    {
+      "a": 1,
+      "b": "x"
+    },
+    {
+      "a": 2
+    }
+  ],
+  "anidado": {
+    "zona 1": {
+      "%grasa": 12.5
+    }
+  },
+  "mixta": [
+    1,
+    "uno"
+  ]
+}

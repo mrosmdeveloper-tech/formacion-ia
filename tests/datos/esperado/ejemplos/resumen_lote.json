@@ -1,0 +1,56 @@
+{
+  "archivos_totales": 14,
+  "por_tipo": {
+    "pedido": 4,
+    "lectura_sensor": 6,
+    "actividad": 3
+  },
+  "validos": 7,
+  "con_errores": 6,
+  "sin_tipo": 1,
+  "incidencias_por_categoria": {
+    "campo_extra": 1,
+    "falta_campo": 1,
+    "json_invalido": 1,
+    "nulo_no_permitido": 1,
+    "sin_tipo": 1,
+    "tipo_incorrecto": 3
+  },
+  "rutas_mas_frecuentes": {
+    "pedido": [
+      {
+        "ruta": "$.cliente",
+        "incidencias": 1
+      },
+      {
+        "ruta": "$.notas",
+        "incidencias": 1
+      }
+    ],
+    "lectura_sensor": [
+      {
+        "ruta": "$",
+        "incidencias": 1
+      },
+      {
+        "ruta": "$.lecturas[*].valor",
+        "incidencias": 1
+      }
+    ],
+    "actividad": [
+      {
+        "ruta": "$.dispositivo",
+        "incidencias": 1
+      },
+      {
+        "ruta": "$.segmentos[*]",
+        "incidencias": 1
+      },
+      {
+        "ruta": "$.segmentos[*].puntos[*].observaciones_extra",
+        "incidencias": 1
+      }
+    ]
+  },
+  "tiempo_s": 0.0
+}

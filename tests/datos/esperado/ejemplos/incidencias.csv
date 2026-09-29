@@ -1,0 +1,9 @@
+archivo,tipo,nivel,categoria,ruta,esperado,encontrado,mensaje
+informe_0008.json,,aviso,sin_tipo,,,,El nombre del archivo no encaja con ningún patrón registrado
+pedido_0002.json,pedido,error,tipo_incorrecto,$.cliente,objeto,texto,Tipo incorrecto: se esperaba objeto y se encontró texto
+pedido_0006.json,pedido,error,falta_campo,$.notas,texto | nulo,ausente,Falta el campo obligatorio 'notas'
+ruta_0005.json,actividad,error,tipo_incorrecto,$.segmentos[0],objeto,texto,Tipo incorrecto: se esperaba objeto y se encontró texto
+ruta_0007.json,actividad,error,nulo_no_permitido,$.dispositivo,objeto,nulo,Valor nulo no permitido: se esperaba objeto
+ruta_0013.json,actividad,aviso,campo_extra,$.segmentos[3].puntos[3].observaciones_extra,ausente,booleano,Campo no previsto en el esquema: 'observaciones_extra'
+sensor_0009.json,lectura_sensor,error,tipo_incorrecto,$.lecturas[1].valor,numero,texto,Tipo incorrecto: se esperaba numero y se encontró texto
+sensor_0014.json,lectura_sensor,error,json_invalido,$,,,El archivo no es un JSON válido: Unterminated string starting at: line 1 column 387 (char 386)

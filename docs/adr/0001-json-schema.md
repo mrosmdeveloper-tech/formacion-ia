@@ -1,6 +1,6 @@
 # ADR 0001: Adoptar JSON Schema (draft 2020-12) como formato de esquema
 
-- **Estado:** Propuesto
+- **Estado:** Aceptado (tras medir el resultado; ver Métricas)
 - **Fecha:** 2026-09-29
 
 ## Contexto
@@ -141,4 +141,29 @@ Generar los esquemas como **JSON Schema draft 2020-12** y validar con la librer�
   - **Migración** de los `esquemas.json` existentes, cubierta con el comando `migrar-esquemas`
     y su verificación.
   - **Dos formatos que mantener** mientras exista la opción `--formato propio`.
-- **Métricas:** *se completan en la Fase 4.4 con el benchmark final.*
+- **Métricas** (resultados reales tras la implementación):
+
+  **Rendimiento** ([docs/benchmark.md](../benchmark.md); mediana de 3 repeticiones):
+
+  | Lote | Validación propio (s) | Validación JSON Schema (s) | Archivos/s propio → JSON Schema | Incidencias (ambos) |
+  |---|---:|---:|---:|---:|
+  | 1000 archivos | 1.02 | 4.82 | 977 → 207 | 141 |
+  | 5000 archivos | 5.32 | 25.63 | 939 → 195 | 722 |
+  | 10 000 archivos | 10.46 | 50.49 | 956 → 198 | 1427 |
+
+  JSON Schema es **unas 4,8 veces más lento** validando, de forma constante en los tres tamaños.
+  El registro no cambia (13-16 ms). El riesgo de rendimiento se materializa, pero se **acepta**:
+  la validación es por lotes, 10 000 archivos (336 MB) tardan menos de un minuto, y hay margen de
+  mejora sin cambiar de formato (paralelizar por archivos o filtrar antes con `fastjsonschema`).
+
+  **Capacidades** ([docs/capacidades.md](../capacidades.md)): de 4 de 13 a **12 de 13**, más
+  `integer` con una limitación (se valida, pero se regenera al actualizar el tipo). Todas probadas
+  con reglas añadidas a mano a los esquemas.
+
+  **Equivalencia:** las mismas incidencias en los tres lotes del benchmark, y los tres informes
+  idénticos byte a byte con los dos formatos en todos los datos de prueba (normal, estricto y con
+  truncado). El lote de ejemplo validado con JSON Schema reproduce la referencia generada con la
+  versión legacy. `migrar-esquemas --verificar` lo comprobó también sobre 1000 archivos generados.
+
+  **Calidad:** 298 tests; cobertura del 99 % del paquete, y del 100 % en los módulos nuevos
+  (`jsonschema_formato.py` y `migracion.py`).

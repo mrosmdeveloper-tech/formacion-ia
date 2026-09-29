@@ -1,0 +1,43 @@
+{
+  "id": "PED-000006",
+  "fecha": "2026-05-05T14:33:00",
+  "cliente": {
+    "id": "CLI-29231",
+    "nombre": "Lucía Martínez",
+    "email": "lucia.martinez@correo.example",
+    "telefono": "611031703",
+    "direccion": {
+      "calle": "Calle Mayor, 128",
+      "cp": "28474",
+      "ciudad": "Madrid"
+    }
+  },
+  "lineas": [
+    {
+      "sku": "SKU-6543-BX",
+      "descripcion": "Funda de móvil (gris)",
+      "cantidad": 8,
+      "precio": 197.44
+    },
+    {
+      "sku": "SKU-7379-CZ",
+      "descripcion": "Bolígrafo azul (negro)",
+      "cantidad": 3,
+      "precio": 69.66
+    },
+    {
+      "sku": "SKU-3749-CZ",
+      "descripcion": "Bolígrafo azul (negro)",
+      "cantidad": 7,
+      "precio": 201.78
+    },
+    {
+      "sku": "SKU-3978-HY",
+      "descripcion": "Alfombrilla (blanco)",
+      "cantidad": 5,
+      "precio": 175.55
+    }
+  ],
+  "pagado": true,
+  "etiquetas": []
+}

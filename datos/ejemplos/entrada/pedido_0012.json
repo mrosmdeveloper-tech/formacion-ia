@@ -1,0 +1,38 @@
+{
+  "id": "PED-000012",
+  "fecha": "2026-12-10T06:38:00",
+  "cliente": {
+    "id": "CLI-67875",
+    "nombre": "Pablo Ruiz",
+    "email": "pablo.ruiz@correo.example",
+    "telefono": "694011992",
+    "direccion": {
+      "calle": "Calle Mayor, 28",
+      "cp": "46703",
+      "ciudad": "Valencia"
+    }
+  },
+  "lineas": [
+    {
+      "sku": "SKU-1892-AZ",
+      "descripcion": "Lámpara de escritorio (negro)",
+      "cantidad": 3,
+      "precio": 161.19
+    },
+    {
+      "sku": "SKU-3808-CY",
+      "descripcion": "Alfombrilla (negro)",
+      "cantidad": 4,
+      "precio": 164.34
+    },
+    {
+      "sku": "SKU-4371-AY",
+      "descripcion": "Lámpara de escritorio (gris)",
+      "cantidad": 3,
+      "precio": 25.48
+    }
+  ],
+  "notas": "Llamar antes de subir",
+  "pagado": false,
+  "etiquetas": []
+}

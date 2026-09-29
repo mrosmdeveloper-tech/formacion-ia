@@ -1,0 +1,42 @@
+{
+  "sensor_id": "SEN-0423",
+  "timestamp": "2026-10-16T06:15:00",
+  "ubicacion": {
+    "lat": 40.386103,
+    "lon": -5.274229,
+    "planta": 7
+  },
+  "lecturas": [
+    {
+      "magnitud": "presion",
+      "valor": 1024.01,
+      "unidad": "hPa"
+    },
+    {
+      "magnitud": "temperatura",
+      "valor": -2.15,
+      "unidad": "°C"
+    },
+    {
+      "magnitud": "humedad",
+      "valor": 28.96,
+      "unidad": "%"
+    },
+    {
+      "magnitud": "co2",
+      "valor": 1411.94,
+      "unidad": "ppm"
+    },
+    {
+      "magnitud": "humedad",
+      "valor": 17.14,
+      "unidad": "%"
+    }
+  ],
+  "bateria": 85,
+  "firmware": "v2.6.7",
+  "alertas": [
+    "sin_conexion",
+    "temperatura_alta"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "sensor_id": "SEN-0390",
+  "timestamp": "2026-06-27T03:05:00",
+  "ubicacion": {
+    "lat": 41.705509,
+    "lon": 1.447379,
+    "planta": null
+  },
+  "lecturas": [
+    {
+      "magnitud": "presion",
+      "valor": 997.44,
+      "unidad": "hPa"
+    },
+    {
+      "magnitud": "luz",
+      "valor": 148.39,
+      "unidad": "lux"
+    },
+    {
+      "magnitud": "luz",
+      "valor": 766.93,
+      "unidad": "lux"
+    },
+    {
+      "magnitud": "presion",
+      "valor": 1011.84,
+      "unidad": "hPa"
+    }
+  ],
+  "firmware": "v2.0.13",
+  "alertas": []
+}

@@ -1,0 +1,28 @@
+{
+  "sensor_id": "SEN-0409",
+  "timestamp": "2026-02-03T17:57:00",
+  "ubicacion": {
+    "lat": 39.039313,
+    "lon": -2.950567
+  },
+  "lecturas": [
+    {
+      "magnitud": "temperatura",
+      "valor": 31.19,
+      "unidad": "°C"
+    },
+    {
+      "magnitud": "humedad",
+      "valor": 41.96,
+      "unidad": "%"
+    },
+    {
+      "magnitud": "temperatura",
+      "valor": 28.33,
+      "unidad": "°C"
+    }
+  ],
+  "bateria": 57,
+  "firmware": "v2.3.10",
+  "alertas": []
+}

@@ -1,0 +1,35 @@
+{
+  "notas": null,
+  "etiquetas": [
+    "cliente_vip",
+    "recogida",
+    "fragil"
+  ],
+  "fecha": "2026-09-22T11:17:00",
+  "id": "PED-000001",
+  "pagado": true,
+  "lineas": [
+    {
+      "sku": "SKU-6699-BZ",
+      "cantidad": 7,
+      "descripcion": "Mochila urbana (edición limitada)",
+      "precio": 216.6
+    },
+    {
+      "sku": "SKU-8201-FZ",
+      "descripcion": "Ratón óptico (blanco)",
+      "precio": 183.98,
+      "cantidad": 6
+    }
+  ],
+  "cliente": {
+    "direccion": {
+      "ciudad": "Valencia",
+      "calle": "Plaza Nueva, 44",
+      "cp": "46616"
+    },
+    "nombre": "Martina Pérez",
+    "email": "martina.perez@correo.example",
+    "id": "CLI-43082"
+  }
+}

@@ -1,0 +1,33 @@
+{
+    "sensor_id": "SEN-0117",
+    "timestamp": "2026-04-30T10:13:00",
+    "ubicacion": {
+        "lat": 42.534449,
+        "lon": -5.468071,
+        "planta": null
+    },
+    "lecturas": [
+        {
+            "magnitud": "temperatura",
+            "valor": 20.91,
+            "unidad": "°C"
+        },
+        {
+            "magnitud": "luz",
+            "valor": 434.78,
+            "unidad": "lux"
+        },
+        {
+            "magnitud": "temperatura",
+            "valor": 32.41,
+            "unidad": "°C"
+        },
+        {
+            "magnitud": "temperatura",
+            "valor": 38.13,
+            "unidad": "°C"
+        }
+    ],
+    "firmware": "v2.9.8",
+    "alertas": []
+}

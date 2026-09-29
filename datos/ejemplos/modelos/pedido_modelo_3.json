@@ -1,0 +1,42 @@
+{
+  "id": "PED-000003",
+  "fecha": "2026-07-08T19:36:00",
+  "cliente": {
+    "id": "CLI-97455",
+    "nombre": "Adrián Fernández",
+    "email": "adrian.fernandez@correo.example",
+    "telefono": "687733224",
+    "direccion": {
+      "calle": "Ronda Norte, 5",
+      "cp": "41121",
+      "ciudad": "Sevilla"
+    }
+  },
+  "lineas": [
+    {
+      "sku": "SKU-4765-FY",
+      "descripcion": "Lámpara de escritorio (negro)",
+      "cantidad": 5,
+      "precio": 84.04
+    },
+    {
+      "sku": "SKU-1207-EZ",
+      "descripcion": "Taza de cerámica (gris)",
+      "cantidad": 4,
+      "precio": 104.47
+    },
+    {
+      "sku": "SKU-3459-FZ",
+      "descripcion": "Cuaderno A5 (negro)",
+      "cantidad": 7,
+      "precio": 109.56
+    }
+  ],
+  "notas": null,
+  "pagado": false,
+  "etiquetas": [
+    "urgente",
+    "cliente_vip",
+    "fragil"
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "id": "PED-000002",
+  "fecha": "2026-05-01T06:47:00",
+  "cliente": {
+    "id": "CLI-51895",
+    "nombre": "Sofía Romero",
+    "email": "sofia.romero@correo.example",
+    "direccion": {
+      "calle": "Calle del Sol, 41",
+      "cp": "29723",
+      "ciudad": "Málaga"
+    }
+  },
+  "lineas": [
+    {
+      "sku": "SKU-8245-HZ",
+      "descripcion": "Taza de cerámica (negro)",
+      "cantidad": 1,
+      "precio": 98.01
+    },
+    {
+      "sku": "SKU-7458-DZ",
+      "descripcion": "Bolígrafo azul (negro)",
+      "cantidad": 5,
+      "precio": 243.5
+    },
+    {
+      "sku": "SKU-5996-HZ",
+      "descripcion": "Lámpara de escritorio (edición limitada)",
+      "cantidad": 5,
+      "precio": 202.58
+    },
+    {
+      "sku": "SKU-3270-FZ",
+      "descripcion": "Auriculares (blanco)",
+      "cantidad": 7,
+      "precio": 133.92
+    }
+  ],
+  "notas": null,
+  "pagado": true,
+  "etiquetas": []
+}

@@ -1,0 +1,24 @@
+{
+  "id": "PED-000002",
+  "pagado": true,
+  "lineas": [
+    {
+      "precio": 59.03,
+      "descripcion": "Ratón óptico (gris)",
+      "sku": "SKU-7162-HY",
+      "cantidad": 7
+    },
+    {
+      "precio": 121.86,
+      "descripcion": "Teclado inalámbrico (azul marino)",
+      "cantidad": 5,
+      "sku": "SKU-5949-CX"
+    }
+  ],
+  "etiquetas": [
+    "urgente"
+  ],
+  "fecha": "2026-06-05T15:44:00",
+  "notas": null,
+  "cliente": "pendiente"
+}

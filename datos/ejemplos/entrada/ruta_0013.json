@@ -1,0 +1,193 @@
+{
+  "id": "ACT-000013",
+  "deporte": "ciclismo",
+  "inicio": "2026-06-07T08:58:00",
+  "privada": false,
+  "usuario": {
+    "id": "USR-9129",
+    "alias": "liebre24",
+    "peso_kg": 58.9,
+    "%grasa": 10.0
+  },
+  "dispositivo": {
+    "modelo": "Pulsera Trek 5",
+    "firmware": "2.19.0",
+    "sensores": [
+      "cadencia"
+    ]
+  },
+  "segmentos": [
+    {
+      "nombre": "Vega 1",
+      "tipo": "llano",
+      "puntos": [
+        {
+          "lat": 41.369581,
+          "lon": 2.178013,
+          "alt": 105.8,
+          "t": 0,
+          "cadencia": 77
+        },
+        {
+          "lat": 41.369563,
+          "lon": 2.177961,
+          "alt": 105.3,
+          "t": 1,
+          "cadencia": 87
+        },
+        {
+          "lat": 41.369542,
+          "lon": 2.177902,
+          "alt": 105.3,
+          "t": 2,
+          "cadencia": 85
+        },
+        {
+          "lat": 41.369536,
+          "lon": 2.177748,
+          "alt": 105.5,
+          "t": 4,
+          "cadencia": 86
+        },
+        {
+          "lat": 41.369572,
+          "lon": 2.177601,
+          "alt": 105.7,
+          "t": 6,
+          "cadencia": 92
+        },
+        {
+          "lat": 41.369598,
+          "lon": 2.177499,
+          "alt": 105.6,
+          "t": 8,
+          "cadencia": 91
+        },
+        {
+          "lat": 41.369651,
+          "lon": 2.177372,
+          "alt": 105.4,
+          "t": 10,
+          "cadencia": 81
+        },
+        {
+          "lat": 41.369695,
+          "lon": 2.177252,
+          "alt": 105.4,
+          "t": 12,
+          "cadencia": 76
+        }
+      ]
+    },
+    {
+      "nombre": "Collado 2",
+      "tipo": "bajada",
+      "puntos": [
+        {
+          "lat": 41.369742,
+          "lon": 2.177129,
+          "alt": 104.7,
+          "t": 14,
+          "cadencia": 81
+        },
+        {
+          "lat": 41.36976,
+          "lon": 2.17707,
+          "alt": 104.2,
+          "t": 15,
+          "cadencia": 91
+        }
+      ]
+    },
+    {
+      "nombre": "Llegada 3",
+      "tipo": "subida",
+      "puntos": [
+        {
+          "lat": 41.369779,
+          "lon": 2.176935,
+          "alt": 104.5,
+          "t": 17,
+          "cadencia": 81
+        },
+        {
+          "lat": 41.369779,
+          "lon": 2.176872,
+          "alt": 105.0,
+          "t": 18,
+          "cadencia": 94
+        },
+        {
+          "lat": 41.369789,
+          "lon": 2.176761,
+          "alt": 104.8,
+          "t": 20,
+          "cadencia": 80
+        },
+        {
+          "lat": 41.369798,
+          "lon": 2.176704,
+          "alt": 104.8,
+          "t": 21,
+          "cadencia": 93
+        },
+        {
+          "lat": 41.369814,
+          "lon": 2.176642,
+          "alt": 104.8,
+          "t": 22,
+          "cadencia": 75
+        }
+      ]
+    },
+    {
+      "nombre": "Pinar 4",
+      "tipo": "llano",
+      "puntos": [
+        {
+          "lat": 41.369832,
+          "lon": 2.176572,
+          "alt": 105.2,
+          "t": 23,
+          "cadencia": 95
+        },
+        {
+          "lat": 41.369873,
+          "lon": 2.176466,
+          "alt": 105.4,
+          "t": 25,
+          "cadencia": 91
+        },
+        {
+          "lat": 41.369888,
+          "lon": 2.176404,
+          "alt": 105.3,
+          "t": 26,
+          "cadencia": 76
+        },
+        {
+          "lat": 41.369911,
+          "lon": 2.176288,
+          "alt": 105.0,
+          "t": 28,
+          "cadencia": 89,
+          "observaciones_extra": true
+        },
+        {
+          "lat": 41.369921,
+          "lon": 2.17623,
+          "alt": 105.1,
+          "t": 29,
+          "cadencia": 77
+        }
+      ]
+    }
+  ],
+  "resumen": {
+    "distancia_km": 0.16,
+    "duracion_s": 29,
+    "desnivel_m": 1.9,
+    "velocidad_media": 19.62
+  },
+  "comentario": null
+}

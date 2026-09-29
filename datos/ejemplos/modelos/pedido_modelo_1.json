@@ -1,0 +1,42 @@
+{
+  "id": "PED-000001",
+  "fecha": "2026-05-07T14:00:00",
+  "cliente": {
+    "id": "CLI-86699",
+    "nombre": "Leo Díaz",
+    "email": "leo.diaz@correo.example",
+    "telefono": "620135681",
+    "direccion": {
+      "calle": "Paseo de la Estación, 36",
+      "cp": "28339",
+      "ciudad": "Madrid"
+    }
+  },
+  "lineas": [
+    {
+      "sku": "SKU-2371-AZ",
+      "descripcion": "Ratón óptico (azul marino)",
+      "cantidad": 1,
+      "precio": 230.49
+    },
+    {
+      "sku": "SKU-1058-CY",
+      "descripcion": "Funda de móvil (azul marino)",
+      "cantidad": 10,
+      "precio": 37.86
+    },
+    {
+      "sku": "SKU-3331-GY",
+      "descripcion": "Lámpara de escritorio (blanco)",
+      "cantidad": 10,
+      "precio": 59.15
+    }
+  ],
+  "descuento": 10,
+  "notas": "Envolver para regalo",
+  "pagado": true,
+  "etiquetas": [
+    "recogida",
+    "fragil"
+  ]
+}

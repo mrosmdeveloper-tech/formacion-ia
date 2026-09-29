@@ -1,0 +1,1 @@
+{"ubicacion":{"lon":-3.903813,"lat":38.496132},"lecturas":[{"unidad":"ppm","valor":1514.88,"magnitud":"co2"},{"unidad":"ppm","valor":1212.72,"magnitud":"co2"},{"magnitud":"co2","valor":908.03,"unidad":"ppm"}],"firmware":"v3.2.2","sensor_id":"SEN-0340","alertas":[],"timestamp":"2026-02-12T14:24:00"}

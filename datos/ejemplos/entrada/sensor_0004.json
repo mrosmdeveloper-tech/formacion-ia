@@ -1,0 +1,1 @@
+{"sensor_id": "SEN-0401", "timestamp": "2026-05-05T06:25:00", "ubicacion": {"lat": 41.970818, "lon": -4.026639, "planta": 0}, "lecturas": [{"magnitud": "presion", "valor": 990.0, "unidad": "hPa"}, {"magnitud": "presion", "valor": 1022.54, "unidad": "hPa"}, {"magnitud": "presion", "valor": 994.6, "unidad": "hPa"}], "bateria": 91, "firmware": "v3.6.10", "alertas": ["bateria_baja"]}

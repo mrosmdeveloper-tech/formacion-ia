@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from gestor_json.config import Categoria, Nivel
 from gestor_json.rutas import RUTA_RAIZ
@@ -64,6 +65,9 @@ class TipoRegistrado:
     registrado: str
     """Fecha y hora de registro en formato ISO, sin fracciones de segundo."""
     esquema: NodoEsquema
+    esquema_json: dict[str, Any] | None = None
+    """Esquema JSON Schema tal como está guardado, con las reglas añadidas a mano (solo en ese
+    formato; ``None`` en el formato propio o si todavía no se ha guardado)."""
 
 
 @dataclass(frozen=True)

@@ -5,9 +5,13 @@ Ver la decisión en ``docs/adr/0001-json-schema.md``.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
-from gestor_json.modelos import CampoEsquema, ErrorGestor, NodoEsquema
+from gestor_json.almacenamiento import leer_json
+from gestor_json.config import ARCHIVO_REGISTRO, CARPETA_ESQUEMAS, EXTENSION_ESQUEMA
+from gestor_json.modelos import CampoEsquema, ErrorGestor, NodoEsquema, TipoRegistrado
 from gestor_json.tipos_logicos import TipoLogico
 
 DIALECTO = "https://json-schema.org/draft/2020-12/schema"
@@ -114,3 +118,62 @@ def jsonschema_a_nodo(esquema: dict[str, Any]) -> NodoEsquema:
     item = jsonschema_a_nodo(esquema.get("items", {})) if TipoLogico.LISTA in tipos else None
     orden = list(TipoLogico)
     return NodoEsquema(tuple(sorted(tipos, key=orden.index)), _NULO in tipos_json, campos, item)
+
+
+# --------------------------------------------------------------------------- almacenamiento
+
+class AlmacenEsquemasJsonSchema:
+    """Un ``<tipo>.schema.json`` por tipo y un índice ``registro.json``, en una carpeta.
+
+    El índice guarda, en orden de registro, el tipo, el patrón, el archivo del esquema, los
+    modelos usados y la fecha de registro. Implementa :class:`AlmacenEsquemas`.
+    """
+
+    def __init__(self, carpeta: str | Path = CARPETA_ESQUEMAS) -> None:
+        self._carpeta = Path(carpeta)
+        self._indice = self._carpeta / ARCHIVO_REGISTRO
+
+    def cargar(self) -> dict[str, TipoRegistrado]:
+        """Lee el índice y los esquemas; si no hay índice, no hay tipos registrados."""
+        if not self._indice.exists():
+            return {}
+        tipos = {}
+        for entrada in self._leer_indice():
+            ruta = self._carpeta / entrada["archivo"]
+            try:
+                esquema_json = leer_json(ruta)
+            except Exception as error:  # noqa: BLE001 - cualquier fallo de lectura se informa igual
+                raise ErrorGestor(f"no se puede leer el esquema {ruta}: {error}") from error
+            nombre = entrada["tipo"]
+            tipos[nombre] = TipoRegistrado(nombre, entrada["patron"], entrada["modelos_usados"],
+                                           entrada["registrado"], jsonschema_a_nodo(esquema_json),
+                                           esquema_json)
+        return tipos
+
+    def guardar(self, tipos: dict[str, TipoRegistrado]) -> None:
+        """Escribe los esquemas y el índice, y borra los esquemas de los tipos eliminados."""
+        anteriores = ({entrada["archivo"] for entrada in self._leer_indice()}
+                      if self._indice.exists() else set())
+        self._carpeta.mkdir(parents=True, exist_ok=True)
+        indice = []
+        for nombre, tipo in tipos.items():
+            archivo = f"{nombre}{EXTENSION_ESQUEMA}"
+            _escribir_json(self._carpeta / archivo,
+                           documento_jsonschema(nombre, tipo.esquema, tipo.esquema_json))
+            indice.append({"tipo": nombre, "patron": tipo.patron, "archivo": archivo,
+                           "modelos_usados": tipo.modelos_usados, "registrado": tipo.registrado})
+        _escribir_json(self._indice, {"tipos": indice})
+        for archivo in anteriores - {entrada["archivo"] for entrada in indice}:
+            (self._carpeta / archivo).unlink(missing_ok=True)
+
+    def _leer_indice(self) -> list[dict[str, Any]]:
+        try:
+            entradas: list[dict[str, Any]] = leer_json(self._indice)["tipos"]
+        except Exception as error:  # noqa: BLE001 - cualquier fallo de lectura se informa igual
+            raise ErrorGestor(f"no se puede leer {self._indice}: {error}") from error
+        return entradas
+
+
+def _escribir_json(ruta: Path, datos: Any) -> None:
+    with open(ruta, "w", encoding="utf-8") as archivo:
+        json.dump(datos, archivo, indent=2, ensure_ascii=False)

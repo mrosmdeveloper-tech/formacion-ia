@@ -102,6 +102,10 @@ class TipoDocumento:
     peso: float
     generar: Callable[..., dict[str, Any]]
     generar_modelos: Callable[[random.Random], list[dict[str, Any]]]
+    opcionales: frozenset[str]
+    """Campos que pueden faltar sin que sea un error."""
+    anulables: frozenset[str]
+    """Campos que admiten ``null`` sin que sea un error."""
 
 
 @dataclass
@@ -109,6 +113,7 @@ class Estadisticas:
     """Recuento de lo generado, para el resumen final."""
 
     por_tipo: Counter
+    por_error: Counter
     total_bytes: int = 0
 
 
@@ -430,22 +435,181 @@ def generar_sin_tipo(rng: random.Random, indice: int, *, pequeno: bool = False) 
     }
 
 
+# --------------------------------------------------------------------------- errores inyectados
+
+CAMPOS_EXTRA = ("codigo_interno", "origen", "version_api", "observaciones_extra")
+TEXTOS_EN_LUGAR_DE_OBJETO = ("sin datos", "pendiente", "N/D")
+ERROR_JSON_MAL_FORMADO = "json_mal_formado"
+
+
+def _campos(documento: Any) -> list[tuple[dict[str, Any], str, int]]:
+    """Todos los campos de objetos del documento como (objeto, clave, profundidad)."""
+    campos = []
+    pendientes: list[tuple[Any, int]] = [(documento, 0)]
+    while pendientes:
+        valor, profundidad = pendientes.pop()
+        if isinstance(valor, dict):
+            for clave, hijo in valor.items():
+                campos.append((valor, clave, profundidad))
+                pendientes.append((hijo, profundidad + 1))
+        elif isinstance(valor, list):
+            pendientes.extend((hijo, profundidad + 1) for hijo in valor)
+    return campos
+
+
+def _elegir_campo(
+    rng: random.Random, documento: Any, condicion: Callable[[str, Any], bool]
+) -> tuple[dict[str, Any], str] | None:
+    """Elige un campo que cumpla la condición: la mitad de las veces, del primer nivel."""
+    candidatos = [(o, c, p) for o, c, p in _campos(documento) if condicion(c, o[c])]
+    primer_nivel = [x for x in candidatos if x[2] == 0]
+    if primer_nivel and rng.random() < 0.5:
+        candidatos = primer_nivel
+    if not candidatos:
+        return None
+    objeto, clave, _ = rng.choice(candidatos)
+    return objeto, clave
+
+
+def _es_numero(valor: Any) -> bool:
+    return isinstance(valor, (int, float)) and not isinstance(valor, bool)
+
+
+def _quitar_campo_obligatorio(rng: random.Random, documento: Any, tipo: TipoDocumento) -> bool:
+    elegido = _elegir_campo(rng, documento, lambda c, v: c not in tipo.opcionales)
+    if elegido is None:
+        return False
+    objeto, clave = elegido
+    del objeto[clave]
+    return True
+
+
+def _anadir_campo_extra(rng: random.Random, documento: Any, tipo: TipoDocumento) -> bool:
+    objetos = [documento] + [o[c] for o, c, _ in _campos(documento) if isinstance(o[c], dict)]
+    objetos += [x for o, c, _ in _campos(documento) if isinstance(o[c], list)
+                for x in o[c] if isinstance(x, dict)]
+    objeto = rng.choice(objetos)
+    clave = rng.choice([c for c in CAMPOS_EXTRA if c not in objeto])
+    objeto[clave] = rng.choice(["valor inesperado", 17, True])
+    return True
+
+
+def _numero_como_texto(rng: random.Random, documento: Any, tipo: TipoDocumento) -> bool:
+    elegido = _elegir_campo(rng, documento, lambda c, v: _es_numero(v))
+    if elegido is None:
+        return False
+    objeto, clave = elegido
+    objeto[clave] = str(objeto[clave])
+    return True
+
+
+def _texto_en_lugar_de_objeto(rng: random.Random, documento: Any, tipo: TipoDocumento) -> bool:
+    elegido = _elegir_campo(rng, documento, lambda c, v: isinstance(v, dict))
+    if elegido is None:
+        return False
+    objeto, clave = elegido
+    objeto[clave] = rng.choice(TEXTOS_EN_LUGAR_DE_OBJETO)
+    return True
+
+
+def _nulo_no_permitido(rng: random.Random, documento: Any, tipo: TipoDocumento) -> bool:
+    elegido = _elegir_campo(rng, documento, lambda c, v: c not in tipo.anulables and v is not None)
+    if elegido is None:
+        return False
+    objeto, clave = elegido
+    objeto[clave] = None
+    return True
+
+
+def _elemento_lista_distinto(rng: random.Random, documento: Any, tipo: TipoDocumento) -> bool:
+    elegido = _elegir_campo(rng, documento, lambda c, v: isinstance(v, list) and len(v) > 0)
+    if elegido is None:
+        return False
+    objeto, clave = elegido
+    lista = objeto[clave]
+    posicion = rng.randrange(len(lista))
+    if isinstance(lista[posicion], dict):
+        lista[posicion] = rng.choice(["elemento suelto", 42, {"dato": "otra forma"}])
+    else:
+        lista[posicion] = rng.choice([42, {"valor": lista[posicion]}])
+    return True
+
+
+ERRORES: dict[str, Callable[[random.Random, Any, TipoDocumento], bool]] = {
+    "falta_campo": _quitar_campo_obligatorio,
+    "campo_extra": _anadir_campo_extra,
+    "numero_como_texto": _numero_como_texto,
+    "texto_en_lugar_de_objeto": _texto_en_lugar_de_objeto,
+    "nulo_no_permitido": _nulo_no_permitido,
+    "elemento_lista_distinto": _elemento_lista_distinto,
+    ERROR_JSON_MAL_FORMADO: lambda rng, documento, tipo: True,  # se aplica al serializar
+}
+
+
+def inyectar_error(rng: random.Random, documento: Any, tipo: TipoDocumento) -> str:
+    """Modifica el documento con un error al azar y devuelve su nombre."""
+    nombres = list(ERRORES)
+    rng.shuffle(nombres)
+    for nombre in nombres:
+        if ERRORES[nombre](rng, documento, tipo):
+            return nombre
+    raise RuntimeError("No se ha podido inyectar ningún error")  # no ocurre con los tipos actuales
+
+
+def _estropear_json(rng: random.Random, texto: str) -> str:
+    """Convierte un JSON válido en uno mal formado."""
+    if rng.random() < 0.5:
+        return texto[: rng.randint(len(texto) // 3, len(texto) - 2)]  # archivo cortado
+    cierre = texto.rfind("}")
+    return texto[:cierre].rstrip() + "," + texto[cierre:]  # coma sobrante
+
+
+# --------------------------------------------------------------------------- formato
+
+def _desordenar_claves(rng: random.Random, valor: Any) -> Any:
+    """Copia del valor con las claves de todos los objetos en orden aleatorio."""
+    if isinstance(valor, dict):
+        claves = list(valor)
+        rng.shuffle(claves)
+        return {c: _desordenar_claves(rng, valor[c]) for c in claves}
+    if isinstance(valor, list):
+        return [_desordenar_claves(rng, x) for x in valor]
+    return valor
+
+
+def _serializar(
+    rng: random.Random, documento: Any, *, variar_formato: bool, mal_formado: bool = False
+) -> bytes:
+    """Convierte el documento en bytes, con formato variado si se pide."""
+    if variar_formato:
+        sangria = rng.choice([None, None, 2, 2, 4])
+        if rng.random() < 0.3:
+            documento = _desordenar_claves(rng, documento)
+        con_bom = rng.random() < 0.05
+    else:
+        sangria, con_bom = 2, False
+    separadores = (",", ":") if sangria is None and rng.random() < 0.5 else None
+    texto = json.dumps(documento, ensure_ascii=False, indent=sangria, separators=separadores)
+    if mal_formado:
+        texto = _estropear_json(rng, texto)
+    return texto.encode("utf-8-sig" if con_bom else "utf-8")
+
+
 # --------------------------------------------------------------------------- lote
 
 TIPOS = (
-    TipoDocumento("pedido", "pedido", 0.45, generar_pedido, modelos_pedido),
+    TipoDocumento("pedido", "pedido", 0.45, generar_pedido, modelos_pedido,
+                  opcionales=frozenset({"telefono", "descuento"}),
+                  anulables=frozenset({"notas"})),
     TipoDocumento("lectura_sensor", "sensor", 0.40, generar_lectura_sensor,
-                  modelos_lectura_sensor),
+                  modelos_lectura_sensor,
+                  opcionales=frozenset({"planta", "bateria"}),
+                  anulables=frozenset({"planta"})),
     # Las actividades son mucho más grandes: menos archivos para que el lote no se dispare.
-    TipoDocumento("actividad", "ruta", 0.12, generar_actividad, modelos_actividad),
+    TipoDocumento("actividad", "ruta", 0.12, generar_actividad, modelos_actividad,
+                  opcionales=frozenset({"%grasa", "fc", "cadencia", "pulso", "fotos"}),
+                  anulables=frozenset({"comentario"})),
 )
-
-
-def _escribir_json(ruta: Path, documento: Any) -> int:
-    """Escribe el documento y devuelve el número de bytes escritos."""
-    datos = json.dumps(documento, ensure_ascii=False, indent=2).encode("utf-8")
-    ruta.write_bytes(datos)
-    return len(datos)
 
 
 def _elegir_tipo(rng: random.Random) -> TipoDocumento | None:
@@ -464,17 +628,19 @@ def generar_lote(
     carpeta_modelos.mkdir(parents=True, exist_ok=True)
     carpeta_entrada.mkdir(parents=True, exist_ok=True)
 
-    estadisticas = Estadisticas(por_tipo=Counter())
+    estadisticas = Estadisticas(por_tipo=Counter(), por_error=Counter())
     rng_modelos = random.Random(semilla)
     for tipo in TIPOS:
         for numero, modelo in enumerate(tipo.generar_modelos(rng_modelos), start=1):
-            ruta = carpeta_modelos / f"{tipo.prefijo}_modelo_{numero}.json"
-            estadisticas.total_bytes += _escribir_json(ruta, modelo)
+            datos = _serializar(rng_modelos, modelo, variar_formato=False)
+            (carpeta_modelos / f"{tipo.prefijo}_modelo_{numero}.json").write_bytes(datos)
+            estadisticas.total_bytes += len(datos)
 
     rng = random.Random(semilla + 1)
     ancho = max(4, len(str(archivos)))
     for indice in range(1, archivos + 1):
         tipo = _elegir_tipo(rng)
+        error = None
         if tipo is None:
             prefijo = rng.choice(PREFIJOS_SIN_TIPO)
             documento = generar_sin_tipo(rng, indice, pequeno=pequenos)
@@ -483,8 +649,13 @@ def generar_lote(
             prefijo = tipo.prefijo
             documento = tipo.generar(rng, indice, pequeno=pequenos)
             estadisticas.por_tipo[tipo.nombre] += 1
-        ruta = carpeta_entrada / f"{prefijo}_{indice:0{ancho}d}.json"
-        estadisticas.total_bytes += _escribir_json(ruta, documento)
+            if rng.random() < tasa_errores:
+                error = inyectar_error(rng, documento, tipo)
+                estadisticas.por_error[error] += 1
+        datos = _serializar(rng, documento, variar_formato=True,
+                            mal_formado=error == ERROR_JSON_MAL_FORMADO)
+        (carpeta_entrada / f"{prefijo}_{indice:0{ancho}d}.json").write_bytes(datos)
+        estadisticas.total_bytes += len(datos)
     return estadisticas
 
 
@@ -493,7 +664,10 @@ def _mostrar_resumen(salida: Path, archivos: int, estadisticas: Estadisticas, se
     print(f"  Modelos: {3 * len(TIPOS)} (3 por tipo) en modelos/")
     print(f"  Archivos de entrada: {archivos}")
     for nombre in [t.nombre for t in TIPOS] + ["sin tipo"]:
-        print(f"    {nombre:<18}{estadisticas.por_tipo[nombre]:>7}")
+        print(f"    {nombre:<25}{estadisticas.por_tipo[nombre]:>7}")
+    print(f"  Con errores inyectados: {sum(estadisticas.por_error.values())}")
+    for nombre in ERRORES:
+        print(f"    {nombre:<25}{estadisticas.por_error[nombre]:>7}")
     print(f"  Tamaño total: {estadisticas.total_bytes / 1_048_576:.1f} MB")
     print(f"  Tiempo: {segundos:.1f} s")
 

@@ -118,6 +118,13 @@ class Incidencia:
                    TipoLogico.NULO.value, f"Valor nulo no permitido: se esperaba {esperado}")
 
     @classmethod
+    def regla_incumplida(cls, ruta: str, regla: str, esperado: str, encontrado: str,
+                         detalle: str) -> Incidencia:
+        """El valor incumple una regla de JSON Schema (``minimum``, ``pattern``, ``format``…)."""
+        return cls(Nivel.ERROR, Categoria.REGLA_INCUMPLIDA, ruta, esperado, encontrado,
+                   f"Regla '{regla}' incumplida: {detalle}")
+
+    @classmethod
     def varios_tipos(cls, elegido: str, candidatos: list[str]) -> Incidencia:
         """El nombre del archivo encaja con varios patrones; se valida con ``elegido``."""
         lista = ", ".join(candidatos)

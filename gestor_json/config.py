@@ -42,3 +42,5 @@ class Categoria:
     VARIOS_TIPOS = "varios_tipos"
     SIN_TIPO = "sin_tipo"
     INCIDENCIAS_TRUNCADAS = "incidencias_truncadas"
+    REGLA_INCUMPLIDA = "regla_incumplida"
+    """Una regla de JSON Schema distinta de tipo, obligatorio o campo extra (minimum, pattern…)."""

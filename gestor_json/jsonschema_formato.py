@@ -6,13 +6,18 @@ Ver la decisión en ``docs/adr/0001-json-schema.md``.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable, Mapping
+
+from jsonschema import Draft202012Validator, SchemaError, ValidationError
 
 from gestor_json.almacenamiento import leer_json
 from gestor_json.config import ARCHIVO_REGISTRO, CARPETA_ESQUEMAS, EXTENSION_ESQUEMA
-from gestor_json.modelos import CampoEsquema, ErrorGestor, NodoEsquema, TipoRegistrado
-from gestor_json.tipos_logicos import TipoLogico
+from gestor_json.modelos import CampoEsquema, ErrorGestor, Incidencia, NodoEsquema, TipoRegistrado
+from gestor_json.rutas import RUTA_RAIZ, clave_orden, ruta_campo, ruta_elemento
+from gestor_json.tipos_logicos import TipoLogico, clasificar_valor
+from gestor_json.validacion import Validador
 
 DIALECTO = "https://json-schema.org/draft/2020-12/schema"
 
@@ -177,3 +182,139 @@ class AlmacenEsquemasJsonSchema:
 def _escribir_json(ruta: Path, datos: Any) -> None:
     with open(ruta, "w", encoding="utf-8") as archivo:
         json.dump(datos, archivo, indent=2, ensure_ascii=False)
+
+
+# --------------------------------------------------------------------------- validación
+
+_NOMBRE_TIPO = {"string": "texto", "number": "numero", "integer": "entero", "boolean": "booleano",
+                "object": "objeto", "array": "lista", _NULO: "nulo"}
+
+# Mensajes de las reglas más habituales; el resto usa el mensaje de jsonschema.
+_MENSAJES_REGLA = {
+    "minimum": "debe ser mayor o igual que {}",
+    "maximum": "debe ser menor o igual que {}",
+    "exclusiveMinimum": "debe ser mayor que {}",
+    "exclusiveMaximum": "debe ser menor que {}",
+    "multipleOf": "debe ser múltiplo de {}",
+    "minLength": "debe tener al menos {} caracteres",
+    "maxLength": "debe tener como máximo {} caracteres",
+    "pattern": "debe seguir el patrón {}",
+    "enum": "debe ser uno de {}",
+    "const": "debe ser {}",
+    "format": "debe tener el formato {}",
+    "minItems": "debe tener al menos {} elementos",
+    "maxItems": "debe tener como máximo {} elementos",
+    "uniqueItems": "no debe tener elementos repetidos",
+}
+
+
+class ValidadorJsonSchema:
+    """Validador basado en la librería ``jsonschema`` (draft 2020-12). Implementa :class:`Validador`.
+
+    Se compila una vez por tipo y comprueba los formatos (``email``, ``date-time``…) con el
+    ``FormatChecker`` de ``jsonschema``: sin él, ``format`` sería solo una anotación. Traduce los
+    errores a las mismas incidencias que el validador propio, más la categoría
+    ``regla_incumplida`` para el resto de reglas.
+    """
+
+    def __init__(self, esquema: dict[str, Any], estricto: bool = False) -> None:
+        """``estricto``: los campos no previstos cuentan como error en lugar de como aviso."""
+        try:
+            Draft202012Validator.check_schema(esquema)
+        except SchemaError as error:
+            raise ErrorGestor(f"el esquema '{esquema.get('title', '')}' no es un JSON Schema "
+                              f"válido: {error.message}") from error
+        self._validador = Draft202012Validator(
+            esquema, format_checker=Draft202012Validator.FORMAT_CHECKER)
+        self._estricto = estricto
+
+    def validar(self, documento: Any) -> list[Incidencia]:
+        """Valida el documento y devuelve sus incidencias ordenadas por ruta."""
+        incidencias: list[Incidencia] = []
+        objetos_revisados: set[str] = set()
+        for error in self._validador.iter_errors(documento):
+            ruta = _ruta(error.absolute_path)
+            if error.validator == "required":
+                # jsonschema da un error por campo que falta; se calculan todos a la vez.
+                if ruta not in objetos_revisados:
+                    objetos_revisados.add(ruta)
+                    incidencias.extend(_campos_que_faltan(error, ruta))
+            elif error.validator == "additionalProperties":
+                incidencias.extend(self._campos_extra(error, ruta))
+            elif error.validator == "type":
+                incidencias.append(_tipo_incorrecto(error, ruta))
+            else:
+                incidencias.append(_regla_incumplida(error, ruta))
+        return sorted(incidencias, key=lambda incidencia: clave_orden(incidencia.ruta))
+
+    def _campos_extra(self, error: ValidationError, ruta: str) -> list[Incidencia]:
+        subesquema = _subesquema(error)
+        previstos = subesquema.get("properties", {})
+        patrones = [re.compile(p) for p in subesquema.get("patternProperties", {})]
+        objeto: dict[str, Any] = error.instance  # type: ignore[assignment]
+        return [
+            Incidencia.campo_extra(ruta_campo(ruta, clave), clave, clasificar_valor(valor).value,
+                                   self._estricto)
+            for clave, valor in objeto.items()
+            if clave not in previstos and not any(p.search(clave) for p in patrones)
+        ]
+
+
+def crear_validador_jsonschema(tipo: TipoRegistrado, estricto: bool) -> Validador:
+    """Fábrica de validadores JSON Schema: usa el esquema guardado (con sus reglas a mano)."""
+    esquema = tipo.esquema_json or documento_jsonschema(tipo.nombre, tipo.esquema)
+    return ValidadorJsonSchema(esquema, estricto)
+
+
+def describir_tipos(esquema: Mapping[str, Any]) -> str:
+    """Tipos admitidos por un subesquema, con los mismos nombres que el formato propio."""
+    tipos = esquema.get("type")
+    if tipos is None:
+        nulo = " | nulo" if esquema.get("examples") == [None] else ""
+        return TipoLogico.DESCONOCIDO.value + nulo
+    if isinstance(tipos, str):
+        tipos = [tipos]
+    return " | ".join(_NOMBRE_TIPO.get(t, t) for t in tipos)
+
+
+def _subesquema(error: ValidationError) -> Mapping[str, Any]:
+    """Subesquema donde se produjo el error (en los tipos de jsonschema puede ser ``bool``)."""
+    return error.schema if isinstance(error.schema, Mapping) else {}
+
+
+def _ruta(camino: Iterable[str | int]) -> str:
+    ruta = RUTA_RAIZ
+    for paso in camino:
+        ruta = ruta_elemento(ruta, paso) if isinstance(paso, int) else ruta_campo(ruta, paso)
+    return ruta
+
+
+def _campos_que_faltan(error: ValidationError, ruta: str) -> list[Incidencia]:
+    propiedades = _subesquema(error).get("properties", {})
+    objeto: dict[str, Any] = error.instance  # type: ignore[assignment]
+    requeridos: list[str] = error.validator_value  # type: ignore[assignment]
+    return [
+        Incidencia.falta_campo(ruta_campo(ruta, campo), campo,
+                               describir_tipos(propiedades.get(campo, {})))
+        for campo in requeridos if campo not in objeto
+    ]
+
+
+def _tipo_incorrecto(error: ValidationError, ruta: str) -> Incidencia:
+    esperado = describir_tipos(_subesquema(error))
+    if error.instance is None:
+        return Incidencia.nulo_no_permitido(ruta, esperado)
+    return Incidencia.tipo_incorrecto(ruta, esperado, clasificar_valor(error.instance).value)
+
+
+def _regla_incumplida(error: ValidationError, ruta: str) -> Incidencia:
+    regla = str(error.validator)
+    valor = error.validator_value
+    valor_texto = valor if isinstance(valor, str) else json.dumps(valor, ensure_ascii=False)
+    plantilla = _MENSAJES_REGLA.get(regla)
+    detalle = plantilla.format(valor_texto) if plantilla else error.message
+    if isinstance(error.instance, (dict, list)):
+        encontrado = clasificar_valor(error.instance).value
+    else:
+        encontrado = json.dumps(error.instance, ensure_ascii=False)
+    return Incidencia.regla_incumplida(ruta, regla, f"{regla}: {valor_texto}", encontrado, detalle)

@@ -510,3 +510,42 @@ def test_integer_a_mano_se_valida_pero_se_regenera_al_actualizar(ejecutar):
         ("tipo_incorrecto", "$.lineas[0].cantidad", "entero")]
     cantidad = leer(esquema_path)["properties"]["lineas"]["items"]["properties"]["cantidad"]
     assert cantidad == {"type": "number"}
+
+
+# --------------------------------------------------------------------------- nombres de archivo seguros
+
+@pytest.mark.parametrize("nombre", ["../fuera", "a/b", "a\b", "..", "con espacio", "c:x", ""])
+def test_un_nombre_de_tipo_no_puede_salir_de_la_carpeta_de_esquemas(ejecutar, tmp_path, nombre):
+    codigo, salida = ejecutar("registrar", "--tipo", nombre, "--patron", "x_*.json",
+                              "--modelo", MODELOS / "vacio.json")
+
+    if nombre.strip():  # un nombre vacío lo rechaza antes la CLI ("falta --tipo")
+        assert codigo == 2
+        assert salida == (f"Error: el nombre de tipo '{nombre}' no se puede usar como nombre de "
+                          "archivo: usa solo letras, números, '_', '-' y '.'\n")
+    assert codigo == 2
+    assert list(tmp_path.rglob("*.schema.json")) == []
+
+
+@pytest.mark.parametrize("nombre", ["pedido", "lectura_sensor", "v1.2-beta", "población"])
+def test_nombres_de_tipo_validos(ejecutar, nombre):
+    assert ejecutar("registrar", "--tipo", nombre, "--patron", "x_*.json",
+                    "--modelo", MODELOS / "vacio.json")[0] == 0
+    assert Path(f"esquemas/{nombre}.schema.json").exists()
+
+
+@pytest.mark.parametrize("archivo", ["../fuera.schema.json", "sub/a.schema.json", ""])
+def test_un_indice_editado_no_puede_apuntar_fuera_de_la_carpeta(tmp_path, archivo):
+    almacen = AlmacenEsquemasJsonSchema(tmp_path / "esquemas")
+    almacen.guardar({"a": tipo_registrado("a", "a_*", {})})
+    victima = tmp_path / "fuera.schema.json"
+    victima.write_text("{}", encoding="utf-8")
+    indice = leer(tmp_path / "esquemas" / "registro.json")
+    indice["tipos"][0]["archivo"] = archivo
+    escribir(tmp_path / "esquemas" / "registro.json", indice)
+
+    with pytest.raises(ErrorGestor, match="apunta a un archivo no válido"):
+        almacen.cargar()
+    with pytest.raises(ErrorGestor, match="apunta a un archivo no válido"):
+        almacen.guardar({})  # no borra nada fuera de la carpeta
+    assert victima.exists()

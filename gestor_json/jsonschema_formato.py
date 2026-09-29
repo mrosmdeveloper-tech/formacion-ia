@@ -127,6 +127,10 @@ def jsonschema_a_nodo(esquema: dict[str, Any]) -> NodoEsquema:
 
 # --------------------------------------------------------------------------- almacenamiento
 
+# Nombre de archivo sin separadores de carpeta ni otros caracteres especiales (\w incluye letras
+# con tilde). Con ".." prohibido aparte, no puede salir de la carpeta de esquemas.
+_NOMBRE_DE_ARCHIVO_SEGURO = re.compile(r"\w[\w.-]*")
+
 class AlmacenEsquemasJsonSchema:
     """Un ``<tipo>.schema.json`` por tipo y un índice ``registro.json``, en una carpeta.
 
@@ -156,26 +160,42 @@ class AlmacenEsquemasJsonSchema:
         return tipos
 
     def guardar(self, tipos: dict[str, TipoRegistrado]) -> None:
-        """Escribe los esquemas y el índice, y borra los esquemas de los tipos eliminados."""
+        """Escribe los esquemas y el índice, y borra los esquemas de los tipos eliminados.
+
+        Comprueba todos los nombres antes de escribir nada: un nombre de tipo que no sirve como
+        nombre de archivo (``../fuera``) escribiría fuera de la carpeta de esquemas.
+        """
+        archivos = {nombre: self._archivo_de(nombre) for nombre in tipos}
         anteriores = ({entrada["archivo"] for entrada in self._leer_indice()}
                       if self._indice.exists() else set())
         self._carpeta.mkdir(parents=True, exist_ok=True)
         indice = []
         for nombre, tipo in tipos.items():
-            archivo = f"{nombre}{EXTENSION_ESQUEMA}"
-            _escribir_json(self._carpeta / archivo,
+            _escribir_json(self._carpeta / archivos[nombre],
                            documento_jsonschema(nombre, tipo.esquema, tipo.esquema_json))
-            indice.append({"tipo": nombre, "patron": tipo.patron, "archivo": archivo,
+            indice.append({"tipo": nombre, "patron": tipo.patron, "archivo": archivos[nombre],
                            "modelos_usados": tipo.modelos_usados, "registrado": tipo.registrado})
         _escribir_json(self._indice, {"tipos": indice})
-        for archivo in anteriores - {entrada["archivo"] for entrada in indice}:
+        for archivo in anteriores - set(archivos.values()):
             (self._carpeta / archivo).unlink(missing_ok=True)
 
+    @staticmethod
+    def _archivo_de(nombre: str) -> str:
+        if not _NOMBRE_DE_ARCHIVO_SEGURO.fullmatch(nombre) or ".." in nombre:
+            raise ErrorGestor(f"el nombre de tipo '{nombre}' no se puede usar como nombre de "
+                              "archivo: usa solo letras, números, '_', '-' y '.'")
+        return f"{nombre}{EXTENSION_ESQUEMA}"
+
     def _leer_indice(self) -> list[dict[str, Any]]:
+        """Entradas del índice; cada ``archivo`` debe ser un nombre simple dentro de la carpeta."""
         try:
             entradas: list[dict[str, Any]] = leer_json(self._indice)["tipos"]
         except Exception as error:  # noqa: BLE001 - cualquier fallo de lectura se informa igual
             raise ErrorGestor(f"no se puede leer {self._indice}: {error}") from error
+        for entrada in entradas:
+            archivo = str(entrada.get("archivo", ""))
+            if not _NOMBRE_DE_ARCHIVO_SEGURO.fullmatch(archivo) or ".." in archivo:
+                raise ErrorGestor(f"{self._indice} apunta a un archivo no válido: '{archivo}'")
         return entradas
 
 

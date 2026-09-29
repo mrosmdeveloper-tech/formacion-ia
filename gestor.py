@@ -16,71 +16,14 @@ from gestor_json.config import (
     TOP_RUTAS,
 )
 from gestor_json.almacenamiento import esquema_a_dict, esquema_desde_dict
-from gestor_json.modelos import CampoEsquema, Incidencia, NodoEsquema
+from gestor_json.fusion import fusionar
+from gestor_json.inferencia import inferir_esquema
+from gestor_json.modelos import Incidencia
 from gestor_json.rutas import RUTA_RAIZ, clave_orden, normalizar, ruta_campo, ruta_elemento
 from gestor_json.tipos_logicos import TipoLogico, clasificar_valor
 
 
 incidencias = []
-
-
-def inferir(v):
-    tl = clasificar_valor(v)
-    if tl == TipoLogico.NULO:
-        return NodoEsquema((TipoLogico.DESCONOCIDO,), admite_nulo=True)
-    if tl == TipoLogico.OBJETO:
-        r = NodoEsquema((TipoLogico.OBJETO,))
-        for k in v:
-            r.campos[k] = CampoEsquema(True, inferir(v[k]))
-        return r
-    if tl == TipoLogico.LISTA:
-        r = NodoEsquema((TipoLogico.LISTA,), item=NodoEsquema((TipoLogico.DESCONOCIDO,)))
-        if len(v) > 0:
-            tmp = inferir(v[0])
-            for i in range(1, len(v)):
-                tmp = fusionar(tmp, inferir(v[i]))
-            r.item = tmp
-        return r
-    return NodoEsquema((tl,))
-
-
-def fusionar(a, b):
-    tt = []
-    for x in a.tipos + b.tipos:
-        if x not in tt:
-            tt.append(x)
-    if TipoLogico.DESCONOCIDO in tt and len(tt) > 1:
-        tt.remove(TipoLogico.DESCONOCIDO)
-    orden = list(TipoLogico)
-    tt.sort(key=orden.index)
-    r = NodoEsquema(tuple(tt), a.admite_nulo or b.admite_nulo)
-    if TipoLogico.OBJETO in tt:
-        if TipoLogico.OBJETO in a.tipos and TipoLogico.OBJETO in b.tipos:
-            for k in a.campos:
-                if k in b.campos:
-                    r.campos[k] = CampoEsquema(
-                        a.campos[k].obligatorio and b.campos[k].obligatorio,
-                        fusionar(a.campos[k].esquema, b.campos[k].esquema),
-                    )
-                else:
-                    r.campos[k] = CampoEsquema(False, a.campos[k].esquema)
-            for k in b.campos:
-                if k not in a.campos:
-                    r.campos[k] = CampoEsquema(False, b.campos[k].esquema)
-        else:
-            if TipoLogico.OBJETO in a.tipos:
-                r.campos = a.campos
-            else:
-                r.campos = b.campos
-    if TipoLogico.LISTA in tt:
-        if TipoLogico.LISTA in a.tipos and TipoLogico.LISTA in b.tipos:
-            r.item = fusionar(a.item, b.item)
-        else:
-            if TipoLogico.LISTA in a.tipos:
-                r.item = a.item
-            else:
-                r.item = b.item
-    return r
 
 
 def imprimir(e, nombre, nivel):
@@ -184,9 +127,9 @@ def main():
                 print("Error: no se puede leer el modelo " + m + ": " + str(ex))
                 sys.exit(2)
             if e is None:
-                e = inferir(v)
+                e = inferir_esquema(v)
             else:
-                e = fusionar(e, inferir(v))
+                e = fusionar(e, inferir_esquema(v))
         d["tipos"][tipo] = {
             "patron": pat,
             "modelos_usados": len(mods),
@@ -245,7 +188,7 @@ def main():
             except Exception as ex:
                 print("Error: no se puede leer el modelo " + m + ": " + str(ex))
                 sys.exit(2)
-            e = fusionar(e, inferir(v))
+            e = fusionar(e, inferir_esquema(v))
         d["tipos"][tipo]["esquema"] = e
         d["tipos"][tipo]["modelos_usados"] = d["tipos"][tipo]["modelos_usados"] + len(mods)
         f = open(ARCHIVO_ESQUEMAS, "w", encoding="utf-8")

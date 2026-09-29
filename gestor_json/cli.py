@@ -18,7 +18,8 @@ from dataclasses import dataclass
 from typing import Callable, NoReturn
 
 from gestor_json.almacenamiento import AlmacenEsquemas, AlmacenEsquemasPropio
-from gestor_json.config import MAX_INCIDENCIAS_POR_DEFECTO
+from gestor_json import migracion
+from gestor_json.config import ARCHIVO_ESQUEMAS, CARPETA_ESQUEMAS, MAX_INCIDENCIAS_POR_DEFECTO
 from gestor_json.informes import EscritorInformes, escribir_resumen_lote, imprimir_resumen
 from gestor_json.jsonschema_formato import AlmacenEsquemasJsonSchema, crear_validador_jsonschema
 from gestor_json.lote import ResumenLote, ValidadorLote, listar_archivos
@@ -31,7 +32,8 @@ SALIDA_CORRECTA = 0
 SALIDA_CON_ERRORES = 1
 SALIDA_FALLO = 2
 
-COMANDOS = ("registrar", "actualizar", "tipos", "mostrar", "eliminar", "validar")
+COMANDOS = ("registrar", "actualizar", "tipos", "mostrar", "eliminar", "validar",
+            "migrar-esquemas")
 
 _FALTA_VALOR = re.compile(r"argument (\S+): expected one argument")
 
@@ -67,9 +69,10 @@ def _crear_parser(programa: str) -> argparse.ArgumentParser:
     parser = _ParserSinMensajes(prog=programa, add_help=False, allow_abbrev=False)
     comandos = parser.add_subparsers(dest="comando")
 
-    def subcomando(nombre: str) -> argparse.ArgumentParser:
+    def subcomando(nombre: str, con_formato: bool = True) -> argparse.ArgumentParser:
         parser_comando = comandos.add_parser(nombre, add_help=False, allow_abbrev=False)
-        parser_comando.add_argument("--formato", default=FORMATO_POR_DEFECTO)
+        parser_comando.add_argument("--formato", default=FORMATO_POR_DEFECTO if con_formato else
+                                    argparse.SUPPRESS)
         return parser_comando
 
     registrar = subcomando("registrar")
@@ -91,6 +94,11 @@ def _crear_parser(programa: str) -> argparse.ArgumentParser:
     validar.add_argument("--estricto", action="store_true")
     # Se lee como texto para dar el mensaje de error propio si no es un entero.
     validar.add_argument("--max-incidencias", default=str(MAX_INCIDENCIAS_POR_DEFECTO))
+
+    migrar = subcomando("migrar-esquemas", con_formato=False)
+    migrar.add_argument("--desde", default=ARCHIVO_ESQUEMAS)
+    migrar.add_argument("--hacia", default=CARPETA_ESQUEMAS)
+    migrar.add_argument("--verificar")
     return parser
 
 
@@ -108,6 +116,8 @@ def main(argv: list[str] | None = None) -> int:
         argumentos, sobrantes = _crear_parser(programa).parse_known_args(argv)
         if sobrantes:
             raise ErrorGestor(f"argumento no reconocido: {sobrantes[0]}")
+        if argumentos.comando == "migrar-esquemas":
+            return _migrar_esquemas(argumentos)
         registro = RegistroTipos(_formato(argumentos).crear_almacen())
         return _EJECUTORES[argumentos.comando](argumentos, registro)
     except ErrorGestor as error:
@@ -200,6 +210,25 @@ def _validar(argumentos: argparse.Namespace, registro: RegistroTipos) -> int:
     escribir_resumen_lote(argumentos.salida, resumen, segundos)
     imprimir_resumen(argumentos.salida, resumen, segundos)
     return SALIDA_CON_ERRORES if resumen.con_errores else SALIDA_CORRECTA
+
+
+def _migrar_esquemas(argumentos: argparse.Namespace) -> int:
+    tipos = migracion.migrar(argumentos.desde, argumentos.hacia)
+    print(f"Migrados {len(tipos)} tipo(s) de {argumentos.desde} a {argumentos.hacia}: "
+          f"{', '.join(tipos)}")
+    if argumentos.verificar is None:
+        print("Sin verificación: usa --verificar <archivo_o_carpeta> para comparar las "
+              "incidencias con los dos formatos")
+        return SALIDA_CORRECTA
+    verificacion = migracion.verificar(argumentos.desde, argumentos.hacia, argumentos.verificar)
+    if verificacion.correcta:
+        print(f"Verificación con {argumentos.verificar}: {verificacion.archivos} archivo(s), "
+              "mismas incidencias con los dos formatos")
+        return SALIDA_CORRECTA
+    print(f"Verificación con {argumentos.verificar}: {len(verificacion.distintos)} de "
+          f"{verificacion.archivos} archivo(s) con incidencias distintas: "
+          f"{', '.join(verificacion.distintos)}")
+    return SALIDA_CON_ERRORES
 
 
 _EJECUTORES = {

@@ -189,13 +189,29 @@ def test_almacen_con_esquema_que_falta(tmp_path):
 ESQUEMA = inferir_de_modelos([leer(m) for m in BASE])
 
 
-@pytest.mark.parametrize("documento", sorted(DOCUMENTOS.glob("base_*.json")), ids=lambda p: p.name)
+def _documentos_legibles():
+    """Documentos ``base_*.json`` que son JSON válido, ya leídos.
+
+    ``base_json_invalido.json`` queda fuera: no se puede leer, así que nunca llega a un validador.
+    Su incidencia ``json_invalido`` la comparan los tests de informes con los dos formatos.
+    """
+    documentos = []
+    for ruta in sorted(DOCUMENTOS.glob("base_*.json")):
+        try:
+            documentos.append(pytest.param(
+                json.loads(ruta.read_text(encoding="utf-8-sig")), id=ruta.name))
+        except json.JSONDecodeError:
+            pass
+    return documentos
+
+
+def test_todos_los_documentos_menos_el_invalido_se_comparan():
+    assert len(_documentos_legibles()) == len(list(DOCUMENTOS.glob("base_*.json"))) - 1
+
+
+@pytest.mark.parametrize("contenido", _documentos_legibles())
 @pytest.mark.parametrize("estricto", [False, True], ids=["normal", "estricto"])
-def test_mismas_incidencias_que_el_validador_propio(documento, estricto):
-    try:
-        contenido = json.loads(documento.read_text(encoding="utf-8-sig"))
-    except json.JSONDecodeError:
-        pytest.skip("JSON inválido: no llega al validador")
+def test_mismas_incidencias_que_el_validador_propio(contenido, estricto):
     propio = ValidadorPropio(ESQUEMA, estricto).validar(contenido)
 
     assert ValidadorJsonSchema(documento_jsonschema("base", ESQUEMA), estricto).validar(

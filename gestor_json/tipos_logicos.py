@@ -16,3 +16,24 @@ class TipoLogico(Enum):
     TEXTO = "texto"
     DESCONOCIDO = "desconocido"
     NULO = "nulo"
+
+
+def clasificar_valor(valor: object) -> TipoLogico:
+    """Devuelve el tipo lógico de un valor JSON ya decodificado.
+
+    ``bool`` se comprueba antes que los números porque en Python ``True`` es un ``int``.
+    ``int`` y ``float`` son el mismo tipo lógico: número.
+    """
+    if valor is None:
+        return TipoLogico.NULO
+    if isinstance(valor, bool):
+        return TipoLogico.BOOLEANO
+    if isinstance(valor, (int, float)):
+        return TipoLogico.NUMERO
+    if isinstance(valor, str):
+        return TipoLogico.TEXTO
+    if isinstance(valor, dict):
+        return TipoLogico.OBJETO
+    if isinstance(valor, list):
+        return TipoLogico.LISTA
+    return TipoLogico.DESCONOCIDO

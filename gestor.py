@@ -18,7 +18,7 @@ from gestor_json.config import (
     Categoria,
     Nivel,
 )
-from gestor_json.tipos_logicos import TipoLogico
+from gestor_json.tipos_logicos import TipoLogico, clasificar_valor
 
 # Códigos de tipo del formato propio de esquemas.json
 CODIGOS = {
@@ -29,25 +29,21 @@ CODIGOS = {
     "str": TipoLogico.TEXTO,
     "unk": TipoLogico.DESCONOCIDO,
 }
+CODIGO_DE = {v: k for k, v in CODIGOS.items()}
 
 incidencias = []
 
 
 def inferir(v):
-    if v is None:
+    tl = clasificar_valor(v)
+    if tl == TipoLogico.NULO:
         return {"t": "unk", "nulo": True}
-    if type(v) == bool:
-        return {"t": "bool", "nulo": False}
-    if type(v) == int or type(v) == float:
-        return {"t": "num", "nulo": False}
-    if type(v) == str:
-        return {"t": "str", "nulo": False}
-    if type(v) == dict:
+    if tl == TipoLogico.OBJETO:
         r = {"t": "obj", "nulo": False, "campos": {}}
         for k in v:
             r["campos"][k] = {"req": True, "esq": inferir(v[k])}
         return r
-    if type(v) == list:
+    if tl == TipoLogico.LISTA:
         r = {"t": "list", "nulo": False, "item": {"t": "unk", "nulo": False}}
         if len(v) > 0:
             tmp = inferir(v[0])
@@ -55,7 +51,7 @@ def inferir(v):
                 tmp = fusionar(tmp, inferir(v[i]))
             r["item"] = tmp
         return r
-    return {"t": "unk", "nulo": False}
+    return {"t": CODIGO_DE[tl], "nulo": False}
 
 
 def fusionar(a, b):
@@ -164,18 +160,7 @@ def validar(v, e, ruta, est):
                 "mensaje": "Valor nulo no permitido: se esperaba " + desc(e),
             })
         return
-    if type(v) == bool:
-        tv = "bool"
-    elif type(v) == int or type(v) == float:
-        tv = "num"
-    elif type(v) == str:
-        tv = "str"
-    elif type(v) == dict:
-        tv = "obj"
-    elif type(v) == list:
-        tv = "list"
-    else:
-        tv = "unk"
+    tv = CODIGO_DE[clasificar_valor(v)]
     if tv not in tt:
         incidencias.append({
             "nivel": Nivel.ERROR,
@@ -210,18 +195,7 @@ def validar(v, e, ruta, est):
                     r = ruta + "." + k
                 else:
                     r = ruta + "[" + json.dumps(k, ensure_ascii=False) + "]"
-                if v[k] is None:
-                    aux = "nulo"
-                elif type(v[k]) == bool:
-                    aux = "booleano"
-                elif type(v[k]) == int or type(v[k]) == float:
-                    aux = "numero"
-                elif type(v[k]) == str:
-                    aux = "texto"
-                elif type(v[k]) == dict:
-                    aux = "objeto"
-                else:
-                    aux = "lista"
+                aux = clasificar_valor(v[k]).value
                 if est:
                     tmp = Nivel.ERROR
                 else:

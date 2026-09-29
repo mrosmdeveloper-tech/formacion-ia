@@ -19,11 +19,11 @@ from gestor_json.almacenamiento import esquema_a_dict, esquema_desde_dict
 from gestor_json.fusion import fusionar
 from gestor_json.inferencia import inferir_esquema
 from gestor_json.modelos import Incidencia
-from gestor_json.rutas import RUTA_RAIZ, clave_orden, normalizar, ruta_campo, ruta_elemento
-from gestor_json.tipos_logicos import TipoLogico, clasificar_valor
+from gestor_json.rutas import normalizar
+from gestor_json.tipos_logicos import TipoLogico
+from gestor_json.validacion import ValidadorPropio
 
 
-incidencias = []
 
 
 def imprimir(e, nombre, nivel):
@@ -38,37 +38,7 @@ def imprimir(e, nombre, nivel):
         imprimir(e.item, "[]", nivel + 1)
 
 
-def validar(v, e, ruta, est):
-    global incidencias
-    if e.acepta_cualquier_valor:
-        return
-    tv = clasificar_valor(v)
-    if tv == TipoLogico.NULO:
-        if not e.admite_nulo:
-            incidencias.append(Incidencia.nulo_no_permitido(ruta, e.describir()))
-        return
-    if tv not in e.tipos:
-        incidencias.append(Incidencia.tipo_incorrecto(ruta, e.describir(), tv.value))
-        return
-    if tv == TipoLogico.OBJETO:
-        for k in e.campos:
-            r = ruta_campo(ruta, k)
-            if k in v:
-                validar(v[k], e.campos[k].esquema, r, est)
-            else:
-                if e.campos[k].obligatorio:
-                    incidencias.append(Incidencia.falta_campo(r, k, e.campos[k].esquema.describir()))
-        for k in v:
-            if k not in e.campos:
-                r = ruta_campo(ruta, k)
-                incidencias.append(Incidencia.campo_extra(r, k, clasificar_valor(v[k]).value, est))
-    if tv == TipoLogico.LISTA:
-        for i in range(len(v)):
-            validar(v[i], e.item, ruta_elemento(ruta, i), est)
-
-
 def main():
-    global incidencias
     if len(sys.argv) < 2:
         print("Uso: python gestor.py <comando> [opciones]")
         print("Comandos: registrar, actualizar, tipos, mostrar, eliminar, validar")
@@ -406,11 +376,7 @@ def main():
                     incidencias.append(Incidencia.json_invalido(str(ex)))
                     ok = False
                 if ok:
-                    aux = len(incidencias)
-                    validar(doc, d["tipos"][tipo]["esquema"], RUTA_RAIZ, est)
-                    tmp = incidencias[aux:]
-                    tmp.sort(key=lambda x: clave_orden(x.ruta))
-                    incidencias = incidencias[:aux] + tmp
+                    incidencias = incidencias + ValidadorPropio(d["tipos"][tipo]["esquema"], est).validar(doc)
             if len(incidencias) > mx:
                 aux = len(incidencias)
                 incidencias = incidencias[:mx]

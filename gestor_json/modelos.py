@@ -5,9 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from gestor_json.config import Categoria, Nivel
+from gestor_json.rutas import RUTA_RAIZ
 from gestor_json.tipos_logicos import TipoLogico
-
-RUTA_RAIZ = "$"
 
 
 @dataclass

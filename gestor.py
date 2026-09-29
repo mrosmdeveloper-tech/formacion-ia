@@ -2,7 +2,6 @@ import sys
 import os
 import json
 import fnmatch
-import re
 import csv
 import time
 from datetime import datetime
@@ -18,6 +17,7 @@ from gestor_json.config import (
 )
 from gestor_json.almacenamiento import esquema_a_dict, esquema_desde_dict
 from gestor_json.modelos import CampoEsquema, Incidencia, NodoEsquema
+from gestor_json.rutas import RUTA_RAIZ, clave_orden, normalizar, ruta_campo, ruta_elemento
 from gestor_json.tipos_logicos import TipoLogico, clasificar_valor
 
 
@@ -109,10 +109,7 @@ def validar(v, e, ruta, est):
         return
     if tv == TipoLogico.OBJETO:
         for k in e.campos:
-            if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", k):
-                r = ruta + "." + k
-            else:
-                r = ruta + "[" + json.dumps(k, ensure_ascii=False) + "]"
+            r = ruta_campo(ruta, k)
             if k in v:
                 validar(v[k], e.campos[k].esquema, r, est)
             else:
@@ -120,26 +117,11 @@ def validar(v, e, ruta, est):
                     incidencias.append(Incidencia.falta_campo(r, k, e.campos[k].esquema.describir()))
         for k in v:
             if k not in e.campos:
-                if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", k):
-                    r = ruta + "." + k
-                else:
-                    r = ruta + "[" + json.dumps(k, ensure_ascii=False) + "]"
+                r = ruta_campo(ruta, k)
                 incidencias.append(Incidencia.campo_extra(r, k, clasificar_valor(v[k]).value, est))
     if tv == TipoLogico.LISTA:
         for i in range(len(v)):
-            validar(v[i], e.item, ruta + "[" + str(i) + "]", est)
-
-
-def clave_orden(x):
-    aux = []
-    for m in re.finditer(r'\.([A-Za-z_][A-Za-z0-9_]*)|\[(\d+)\]|\[("(?:[^"\\]|\\.)*")\]', x.ruta):
-        if m.group(1) is not None:
-            aux.append((0, m.group(1)))
-        elif m.group(2) is not None:
-            aux.append((1, int(m.group(2))))
-        else:
-            aux.append((0, json.loads(m.group(3))))
-    return aux
+            validar(v[i], e.item, ruta_elemento(ruta, i), est)
 
 
 def main():
@@ -482,9 +464,9 @@ def main():
                     ok = False
                 if ok:
                     aux = len(incidencias)
-                    validar(doc, d["tipos"][tipo]["esquema"], "$", est)
+                    validar(doc, d["tipos"][tipo]["esquema"], RUTA_RAIZ, est)
                     tmp = incidencias[aux:]
-                    tmp.sort(key=clave_orden)
+                    tmp.sort(key=lambda x: clave_orden(x.ruta))
                     incidencias = incidencias[:aux] + tmp
             if len(incidencias) > mx:
                 aux = len(incidencias)
@@ -503,7 +485,7 @@ def main():
                 else:
                     cats[x.categoria] = 1
                 if tipo != "" and x.ruta != "":
-                    r = re.sub(r"\[\d+\]", "[*]", x.ruta)
+                    r = normalizar(x.ruta)
                     if tipo not in rutas:
                         rutas[tipo] = {}
                     if r in rutas[tipo]:
